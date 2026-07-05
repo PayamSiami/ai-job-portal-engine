@@ -1,0 +1,60 @@
+{
+  "name": "ai-job-portal-engine",
+  "version": "1.0.0",
+  "description": "AI-powered job portal",
+  "main": "app.ts",
+  "scripts": {
+    "start": "node src/app.ts",
+    "dev": "nodemon --exec tsx src/app.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "create-admin": "tsx src/scripts/createAdmin.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^8.5.2",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "kafka-node": "^5.0.0",
+    "mongoose": "^9.7.3",
+    "morg": "^0.1.0",
+    "node-cache": "^5.1.2",
+    "redis": "^6.0.1",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^26.0.1",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
+    "@types/winston": "^2.4.4",
+    "eslint": "^10.6.0",
+    "jest": "^30.4.2",
+    "morgan": "^1.11.0",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.2.2",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  },
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node",
+    "transpileOnly": true
+  }
+}
