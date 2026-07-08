@@ -1,111 +1,389 @@
-// src/services/resumeService.ts
 import Resume, { IResume } from "../models/Resume.models.js";
-import mongoose from "mongoose";
 import logger from "../utils/logger.js";
-
-// ============ Type Definitions ============
+import { Types } from "mongoose";
+import pdfService from "./pdfService.js";
+import fs from "fs";
 
 export interface CreateResumeData {
   title: string;
-  content: string;
-  skills?: string[];
-  experience?: {
-    years?: number;
-    level?: "entry" | "mid" | "senior" | "lead";
-  };
-  education?: {
-    degree?: string;
-    field?: string;
-    institution?: string;
-  };
-  summary?: string;
+  template?: "modern" | "classic" | "minimal" | "creative";
+  visibility?: "private" | "public" | "shared";
   isDefault?: boolean;
-  fileName?: string;
-  fileType?: string;
-  fileSize?: number;
+  generatePDF?: boolean;
+  status?: "draft" | "active" | "archived";
+  personalInfo?: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    location?: string;
+    website?: string;
+    linkedin?: string;
+    github?: string;
+    summary?: string;
+    title?: string;
+  };
+  experience?: Array<{
+    company: string;
+    position: string;
+    location?: string;
+    startDate: Date | string;
+    endDate?: Date | string;
+    current?: boolean;
+    description?: string;
+    achievements?: string[];
+  }>;
+  education?: Array<{
+    institution: string;
+    degree: string;
+    fieldOfStudy?: string;
+    location?: string;
+    startDate: Date | string;
+    endDate?: Date | string;
+    current?: boolean;
+    description?: string;
+    gpa?: number;
+  }>;
+  skills?: Array<{
+    name: string;
+    level?: "beginner" | "intermediate" | "advanced" | "expert";
+    category?: string;
+  }>;
+  certifications?: Array<{
+    name: string;
+    issuer: string;
+    date: Date | string;
+    expiryDate?: Date | string;
+    credentialId?: string;
+    url?: string;
+  }>;
+  languages?: Array<{
+    name: string;
+    proficiency: "basic" | "conversational" | "professional" | "native";
+  }>;
+  projects?: Array<{
+    name: string;
+    description?: string;
+    url?: string;
+    technologies?: string[];
+    startDate?: Date | string;
+    endDate?: Date | string;
+  }>;
+  customSections?: Array<{
+    title: string;
+    content: string;
+    order: number;
+  }>;
 }
 
-export interface UpdateResumeData {
-  title?: string;
-  content?: string;
-  skills?: string[];
-  experience?: {
-    years?: number;
-    level?: "entry" | "mid" | "senior" | "lead";
-  };
-  education?: {
-    degree?: string;
-    field?: string;
-    institution?: string;
-  };
-  summary?: string;
-  isDefault?: boolean;
-  isActive?: boolean;
-}
-
-export interface ResumeFilters {
-  userId?: string;
-  isActive?: boolean;
-  isDefault?: boolean;
-  skills?: string[];
-  experienceLevel?: "entry" | "mid" | "senior" | "lead";
-  search?: string;
-}
-
-export interface PaginationOptions {
+export interface GetResumesOptions {
+  status?: string;
   page?: number;
   limit?: number;
-  sortBy?: string;
-  sortOrder?: "asc" | "desc";
 }
-
-export interface ResumePaginationResult {
-  resumes: IResume[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
-}
-
-// ============ Service Class ============
 
 class ResumeService {
   /**
-   * Create a new resume
+   * Get all resumes for a user with pagination and filtering
    */
-  async createResume(userId: string, data: CreateResumeData): Promise<IResume> {
+  async getResumesByUser(
+    userId: string,
+    options: GetResumesOptions = {},
+  ): Promise<{ resumes: IResume[]; pagination: any }> {
+    try {
+      const { status, page = 1, limit = 10 } = options;
+
+      const query: any = { user: userId };
+      if (status && status !== "all") {
+        query.status = status;
+      }
+
+      const skip = (page - 1) * limit;
+
+      const [resumes, total] = await Promise.all([
+        Resume.find(query)
+          .sort({ updatedAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Resume.countDocuments(query),
+      ]);
+
+      return {
+        resumes,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      logger.error("Failed to get resumes by user", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        userId,
+        options,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get a single resume by ID with user validation
+   */
+  async getResume(id: string, userId?: string): Promise<IResume | null> {
+    try {
+      if (!Types.ObjectId.isValid(id)) {
+        throw new Error("Invalid resume ID");
+      }
+
+      const query: any = { _id: id };
+      if (userId) {
+        query.user = userId;
+      }
+
+      return await Resume.findOne(query).lean();
+    } catch (error) {
+      logger.error("Failed to get resume by ID", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        resumeId: id,
+        userId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new resume with optional PDF generation
+   */
+  async createResume(
+    userId: string,
+    data: CreateResumeData,
+  ): Promise<{ resume: IResume; pdfFile?: any; pdfError?: string }> {
     try {
       logger.info("Creating new resume", { userId, title: data.title });
 
-      // Validate input
       if (!data.title) {
         throw new Error("Resume title is required");
       }
-      if (!data.content || data.content.length < 50) {
-        throw new Error("Resume content must be at least 50 characters");
-      }
+
+      // Check if PDF generation is requested
+      const generatePDF =
+        data.generatePDF !== undefined ? data.generatePDF : true;
 
       // If this is set as default, unset other defaults
       if (data.isDefault) {
         await Resume.updateMany(
-          { userId, isDefault: true },
+          { user: userId, isDefault: true },
           { isDefault: false },
         );
       }
 
-      const resume = new Resume({
-        ...data,
-        userId,
-        isActive: true,
-        version: 1,
-      });
+      // Clean subdocuments
+      const cleanedData = this.cleanSubdocuments(data);
 
+      // Remove generatePDF from data to avoid saving it to the resume
+      delete cleanedData.generatePDF;
+
+      // Build resume data with proper structure
+      const resumeData = {
+        user: userId,
+        title: cleanedData.title,
+        template: cleanedData.template || "modern",
+        visibility: cleanedData.visibility || "private",
+        isDefault: cleanedData.isDefault || false,
+        status: cleanedData.status || "draft",
+        personalInfo: {
+          firstName: cleanedData.personalInfo?.firstName || "",
+          lastName: cleanedData.personalInfo?.lastName || "",
+          email: cleanedData.personalInfo?.email || "",
+          phone: cleanedData.personalInfo?.phone || "",
+          location: cleanedData.personalInfo?.location || "",
+          website: cleanedData.personalInfo?.website || "",
+          linkedin: cleanedData.personalInfo?.linkedin || "",
+          github: cleanedData.personalInfo?.github || "",
+          summary: cleanedData.personalInfo?.summary || "",
+          title: cleanedData.personalInfo?.title || "",
+        },
+        experience:
+          cleanedData.experience?.map(
+            (exp: {
+              company: any;
+              position: any;
+              location: any;
+              startDate: any;
+              endDate: any;
+              current: any;
+              description: any;
+              achievements: any;
+            }) => ({
+              company: exp.company || "",
+              position: exp.position || "",
+              location: exp.location || "",
+              startDate: exp.startDate || new Date(),
+              endDate: exp.endDate || null,
+              current: exp.current || false,
+              description: exp.description || "",
+              achievements: exp.achievements || [],
+            }),
+          ) || [],
+        education:
+          cleanedData.education?.map(
+            (edu: {
+              institution: any;
+              degree: any;
+              fieldOfStudy: any;
+              location: any;
+              startDate: any;
+              endDate: any;
+              current: any;
+              description: any;
+              gpa: any;
+            }) => ({
+              institution: edu.institution || "",
+              degree: edu.degree || "",
+              fieldOfStudy: edu.fieldOfStudy || "",
+              location: edu.location || "",
+              startDate: edu.startDate || new Date(),
+              endDate: edu.endDate || null,
+              current: edu.current || false,
+              description: edu.description || "",
+              gpa: edu.gpa || null,
+            }),
+          ) || [],
+        skills:
+          cleanedData.skills?.map(
+            (skill: { name: any; level: any; category: any }) => ({
+              name: skill.name || "",
+              level: skill.level || "intermediate",
+              category: skill.category || "",
+            }),
+          ) || [],
+        certifications:
+          cleanedData.certifications?.map(
+            (cert: {
+              name: any;
+              issuer: any;
+              date: any;
+              expiryDate: any;
+              credentialId: any;
+              url: any;
+            }) => ({
+              name: cert.name || "",
+              issuer: cert.issuer || "",
+              date: cert.date || new Date(),
+              expiryDate: cert.expiryDate || null,
+              credentialId: cert.credentialId || "",
+              url: cert.url || "",
+            }),
+          ) || [],
+        languages:
+          cleanedData.languages?.map(
+            (lang: { name: any; proficiency: any }) => ({
+              name: lang.name || "",
+              proficiency: lang.proficiency || "professional",
+            }),
+          ) || [],
+        projects:
+          cleanedData.projects?.map(
+            (project: {
+              name: any;
+              description: any;
+              url: any;
+              technologies: any;
+              startDate: any;
+              endDate: any;
+            }) => ({
+              name: project.name || "",
+              description: project.description || "",
+              url: project.url || "",
+              technologies: project.technologies || [],
+              startDate: project.startDate || null,
+              endDate: project.endDate || null,
+            }),
+          ) || [],
+        customSections:
+          cleanedData.customSections?.map(
+            (section: { title: any; content: any; order: any }) => ({
+              title: section.title || "",
+              content: section.content || "",
+              order: section.order || 0,
+            }),
+          ) || [],
+      };
+
+      // Create and save the resume
+      const resume = new Resume(resumeData);
       await resume.save();
 
       logger.info("Resume created successfully", { resumeId: resume._id });
-      return resume;
+
+      let pdfFile = null;
+
+      // Generate PDF if requested
+      if (generatePDF) {
+        try {
+          logger.info("Generating PDF for new resume", {
+            resumeId: resume._id,
+            template: resume.template || "modern",
+          });
+
+          // Generate and save PDF
+          const savedFile = await pdfService.generateAndSavePDF(
+            resume,
+            resume.template || "modern",
+          );
+
+          // Update resume with PDF info
+          await Resume.findByIdAndUpdate(resume._id, {
+            pdfFile: {
+              filename: savedFile.filename,
+              path: savedFile.path,
+              size: savedFile.size,
+              mimeType: "application/pdf",
+              uploadedAt: new Date(),
+            },
+          });
+
+          // Refresh resume data with PDF info
+          const updatedResume = await Resume.findById(resume._id);
+
+          pdfFile = {
+            filename: savedFile.filename,
+            path: savedFile.path,
+            size: savedFile.size,
+            blob: savedFile.blob,
+          };
+
+          logger.info("PDF generated successfully for new resume", {
+            resumeId: resume._id,
+            pdfFile: savedFile.filename,
+            size: savedFile.size,
+          });
+
+          return {
+            resume: updatedResume || resume,
+            pdfFile,
+          };
+        } catch (pdfError) {
+          logger.error("PDF generation failed for new resume:", {
+            resumeId: resume._id,
+            error:
+              pdfError instanceof Error ? pdfError.message : "Unknown error",
+          });
+
+          // Return resume without PDF
+          return {
+            resume,
+            pdfError:
+              pdfError instanceof Error
+                ? pdfError.message
+                : "Failed to generate PDF",
+          };
+        }
+      }
+
+      return { resume };
     } catch (error) {
       logger.error("Failed to create resume", {
         error: error instanceof Error ? error.message : "Unknown error",
@@ -117,65 +395,168 @@ class ResumeService {
   }
 
   /**
-   * Get resume by ID
+   * Update an existing resume with optional PDF regeneration
    */
-  async getResumeById(resumeId: string): Promise<IResume | null> {
+  async updateResume(
+    id: string,
+    userId: string,
+    data: Partial<CreateResumeData>,
+  ): Promise<{ resume: IResume; pdfFile?: any; pdfError?: string }> {
     try {
-      if (!mongoose.Types.ObjectId.isValid(resumeId)) {
+      if (!Types.ObjectId.isValid(id)) {
         throw new Error("Invalid resume ID");
       }
 
-      const resume = await Resume.findById(resumeId)
-        .populate("userId", "username email")
-        .exec();
+      // Find the resume
+      const resume = await Resume.findOne({ _id: id, user: userId });
+      if (!resume) {
+        throw new Error("Resume not found");
+      }
 
-      return resume;
-    } catch (error) {
-      logger.error("Failed to get resume", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        resumeId,
+      // Check if PDF regeneration is requested
+      const regeneratePDF = data.generatePDF ?? false;
+
+      // Remove generatePDF from data
+      const { generatePDF, ...updateData } = data;
+
+      // If setting as default, unset other defaults
+      if (updateData.isDefault) {
+        await Resume.updateMany(
+          { user: userId, isDefault: true, _id: { $ne: id } },
+          { isDefault: false },
+        );
+      }
+
+      // ✅ Use the cleanSubdocuments method to clean data
+      const cleanedData = this.cleanSubdocuments(updateData);
+
+      // ✅ Remove any _id from nested arrays to let MongoDB generate new ones
+      const arrayFields = [
+        "experience",
+        "education",
+        "skills",
+        "certifications",
+        "languages",
+        "projects",
+        "customSections",
+      ];
+      arrayFields.forEach((field) => {
+        if (cleanedData[field] && Array.isArray(cleanedData[field])) {
+          cleanedData[field] = cleanedData[field].map((item: any) => {
+            const { _id, ...rest } = item;
+            return rest;
+          });
+        }
       });
-      throw error;
-    }
-  }
 
-  /**
-   * Get resumes by user
-   */
-  async getResumesByUser(
-    userId: string,
-    options: PaginationOptions = {},
-  ): Promise<ResumePaginationResult> {
-    try {
-      const {
-        page = 1,
-        limit = 10,
-        sortBy = "createdAt",
-        sortOrder = "desc",
-      } = options;
-      const skip = (page - 1) * limit;
-
-      const query = { userId, isActive: true };
-      const sort: any = {};
-      sort[sortBy] = sortOrder === "asc" ? 1 : -1;
-
-      const [resumes, total] = await Promise.all([
-        Resume.find(query).sort(sort).skip(skip).limit(limit).exec(),
-        Resume.countDocuments(query),
-      ]);
-
-      return {
-        resumes,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
+      // Update the resume using findOneAndUpdate (cleaner and more reliable)
+      const updatedResume = await Resume.findOneAndUpdate(
+        { _id: id, user: userId },
+        { $set: cleanedData },
+        {
+          new: true,
+          runValidators: true,
         },
-      };
+      );
+
+      if (!updatedResume) {
+        throw new Error("Failed to update resume");
+      }
+
+      logger.info("Resume updated successfully", { resumeId: id, userId });
+
+      let pdfFile = null;
+
+      // Regenerate PDF if requested
+      if (regeneratePDF) {
+        try {
+          logger.info("Regenerating PDF for updated resume", {
+            resumeId: id,
+            template: updatedResume.template || "modern",
+          });
+
+          // Delete old PDF if exists
+          if (updatedResume.pdfFile?.path) {
+            try {
+              if (fs.existsSync(updatedResume.pdfFile.path)) {
+                fs.unlinkSync(updatedResume.pdfFile.path);
+                logger.info("Old PDF deleted", {
+                  path: updatedResume.pdfFile.path,
+                });
+              }
+            } catch (deleteError) {
+              logger.warn("Failed to delete old PDF", {
+                path: updatedResume.pdfFile?.path,
+                error:
+                  deleteError instanceof Error
+                    ? deleteError.message
+                    : "Unknown error",
+              });
+            }
+          }
+
+          // Generate and save new PDF
+          const savedFile = await pdfService.generateAndSavePDF(
+            updatedResume,
+            updatedResume.template || "modern",
+          );
+
+          // Update resume with new PDF info
+          const finalResume = await Resume.findOneAndUpdate(
+            { _id: id, user: userId },
+            {
+              $set: {
+                pdfFile: {
+                  filename: savedFile.filename,
+                  path: savedFile.path,
+                  size: savedFile.size,
+                  mimeType: "application/pdf",
+                  uploadedAt: new Date(),
+                },
+              },
+            },
+            { new: true },
+          );
+
+          pdfFile = {
+            filename: savedFile.filename,
+            path: savedFile.path,
+            size: savedFile.size,
+            blob: savedFile.blob,
+          };
+
+          logger.info("PDF regenerated successfully for updated resume", {
+            resumeId: id,
+            pdfFile: savedFile.filename,
+            size: savedFile.size,
+          });
+
+          return {
+            resume: finalResume || updatedResume,
+            pdfFile,
+          };
+        } catch (pdfError) {
+          logger.error("PDF regeneration failed for updated resume:", {
+            resumeId: id,
+            error:
+              pdfError instanceof Error ? pdfError.message : "Unknown error",
+          });
+
+          return {
+            resume: updatedResume,
+            pdfError:
+              pdfError instanceof Error
+                ? pdfError.message
+                : "Failed to regenerate PDF",
+          };
+        }
+      }
+
+      return { resume: updatedResume };
     } catch (error) {
-      logger.error("Failed to get resumes by user", {
+      logger.error("Failed to update resume", {
         error: error instanceof Error ? error.message : "Unknown error",
+        resumeId: id,
         userId,
       });
       throw error;
@@ -183,11 +564,118 @@ class ResumeService {
   }
 
   /**
-   * Get default resume for user
+   * Delete a resume
+   */
+  async deleteResume(id: string, userId: string): Promise<void> {
+    try {
+      if (!Types.ObjectId.isValid(id)) {
+        throw new Error("Invalid resume ID");
+      }
+
+      const result = await Resume.findOneAndDelete({ _id: id, user: userId });
+      if (!result) {
+        throw new Error("Resume not found");
+      }
+
+      logger.info("Resume deleted successfully", { resumeId: id, userId });
+    } catch (error) {
+      logger.error("Failed to delete resume", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        resumeId: id,
+        userId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Set a resume as default
+   */
+  async setDefaultResume(id: string, userId: string): Promise<IResume> {
+    try {
+      if (!Types.ObjectId.isValid(id)) {
+        throw new Error("Invalid resume ID");
+      }
+
+      await Resume.updateMany(
+        { user: userId, isDefault: true },
+        { isDefault: false },
+      );
+
+      // ✅ Fixed: Use returnDocument instead of new (deprecated)
+      const resume = await Resume.findOneAndUpdate(
+        { _id: id, user: userId },
+        { isDefault: true },
+        {
+          returnDocument: "after", // ✅ Replaces 'new: true'
+        },
+      );
+
+      if (!resume) {
+        throw new Error("Resume not found");
+      }
+
+      logger.info("Default resume set successfully", { resumeId: id, userId });
+      return resume;
+    } catch (error) {
+      logger.error("Failed to set default resume", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        resumeId: id,
+        userId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Duplicate an existing resume
+   */
+  async duplicateResume(id: string, userId: string): Promise<IResume> {
+    try {
+      if (!Types.ObjectId.isValid(id)) {
+        throw new Error("Invalid resume ID");
+      }
+
+      const original = await Resume.findOne({ _id: id, user: userId });
+      if (!original) {
+        throw new Error("Resume not found");
+      }
+
+      const originalObj = original.toObject();
+      const { _id, createdAt, updatedAt, __v, ...copyData } = originalObj;
+
+      const copy = new Resume({
+        ...copyData,
+        title: `${copyData.title} (Copy)`,
+        isDefault: false,
+        status: "draft",
+      });
+
+      await copy.save();
+
+      logger.info("Resume duplicated successfully", {
+        originalId: id,
+        copyId: copy._id,
+        userId,
+      });
+
+      return copy;
+    } catch (error) {
+      logger.error("Failed to duplicate resume", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        resumeId: id,
+        userId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get the default resume for a user
    */
   async getDefaultResume(userId: string): Promise<IResume | null> {
     try {
-      return Resume.findOne({ userId, isDefault: true, isActive: true }).exec();
+      return await Resume.findOne({ user: userId, isDefault: true }).lean();
     } catch (error) {
       logger.error("Failed to get default resume", {
         error: error instanceof Error ? error.message : "Unknown error",
@@ -198,491 +686,75 @@ class ResumeService {
   }
 
   /**
-   * Get resumes with filters
+   * Clean subdocuments - remove empty or invalid items
    */
-  async getResumes(
-    filters: ResumeFilters = {},
-    options: PaginationOptions = {},
-  ): Promise<ResumePaginationResult> {
-    try {
-      const {
-        page = 1,
-        limit = 10,
-        sortBy = "createdAt",
-        sortOrder = "desc",
-      } = options;
-      const skip = (page - 1) * limit;
+  private cleanSubdocuments(data: any): any {
+    const clean = { ...data };
 
-      // Build query
-      const query: any = {};
+    // ✅ Ensure arrays are properly formatted
+    const arrayFields = [
+      "experience",
+      "education",
+      "skills",
+      "certifications",
+      "languages",
+      "projects",
+      "customSections",
+    ];
 
-      if (filters.userId) {
-        query.userId = filters.userId;
-      }
+    arrayFields.forEach((field) => {
+      if (clean[field] && Array.isArray(clean[field])) {
+        // ✅ Remove items that are completely empty
+        clean[field] = clean[field]
+          .filter((item: any) => {
+            // Check if item has any meaningful data
+            if (field === "experience") {
+              return item.company?.trim() || item.position?.trim();
+            }
+            if (field === "education") {
+              return item.institution?.trim() || item.degree?.trim();
+            }
+            if (field === "skills") {
+              return item.name?.trim();
+            }
+            if (field === "certifications") {
+              return item.name?.trim() || item.issuer?.trim();
+            }
+            if (field === "languages") {
+              return item.name?.trim() && item.proficiency;
+            }
+            if (field === "projects") {
+              return item.name?.trim();
+            }
+            if (field === "customSections") {
+              return item.title?.trim() && item.content?.trim();
+            }
+            return true;
+          })
+          .map((item: any) => {
+            // Clean the item
+            const cleanedItem = { ...item };
 
-      if (filters.isActive !== undefined) {
-        query.isActive = filters.isActive;
-      }
+            // Remove _id if present
+            delete cleanedItem._id;
 
-      if (filters.isDefault !== undefined) {
-        query.isDefault = filters.isDefault;
-      }
+            // Convert string dates to Date objects
+            const dateFields = ["startDate", "endDate", "date", "expiryDate"];
+            dateFields.forEach((dateField) => {
+              if (
+                cleanedItem[dateField] &&
+                typeof cleanedItem[dateField] === "string"
+              ) {
+                cleanedItem[dateField] = new Date(cleanedItem[dateField]);
+              }
+            });
 
-      if (filters.skills && filters.skills.length > 0) {
-        query.skills = { $in: filters.skills };
-      }
-
-      if (filters.experienceLevel) {
-        query["experience.level"] = filters.experienceLevel;
-      }
-
-      if (filters.search) {
-        query.$text = { $search: filters.search };
-      }
-
-      const sort: any = {};
-      sort[sortBy] = sortOrder === "asc" ? 1 : -1;
-
-      const [resumes, total] = await Promise.all([
-        Resume.find(query)
-          .populate("userId", "username email")
-          .sort(sort)
-          .skip(skip)
-          .limit(limit)
-          .exec(),
-        Resume.countDocuments(query),
-      ]);
-
-      return {
-        resumes,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
-      };
-    } catch (error) {
-      logger.error("Failed to get resumes", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        filters,
-        options,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Update resume
-   */
-  async updateResume(
-    resumeId: string,
-    userId: string,
-    data: UpdateResumeData,
-  ): Promise<IResume | null> {
-    try {
-      if (!mongoose.Types.ObjectId.isValid(resumeId)) {
-        throw new Error("Invalid resume ID");
-      }
-
-      // Check if resume exists and belongs to user
-      const existingResume = await Resume.findOne({ _id: resumeId, userId });
-      if (!existingResume) {
-        throw new Error("Resume not found or does not belong to user");
-      }
-
-      // If setting as default, unset other defaults
-      if (data.isDefault) {
-        await Resume.updateMany(
-          { userId, isDefault: true, _id: { $ne: resumeId } },
-          { isDefault: false },
-        );
-      }
-
-      const resume = await Resume.findByIdAndUpdate(
-        resumeId,
-        { ...data, updatedAt: new Date() },
-        { new: true, runValidators: true },
-      );
-
-      logger.info("Resume updated", { resumeId, userId });
-      return resume;
-    } catch (error) {
-      logger.error("Failed to update resume", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        resumeId,
-        userId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Set resume as default
-   */
-  async setDefaultResume(
-    userId: string,
-    resumeId: string,
-  ): Promise<IResume | null> {
-    try {
-      if (!mongoose.Types.ObjectId.isValid(resumeId)) {
-        throw new Error("Invalid resume ID");
-      }
-
-      // Check if resume exists and belongs to user
-      const resume = await Resume.findOne({
-        _id: resumeId,
-        userId,
-        isActive: true,
-      });
-      if (!resume) {
-        throw new Error("Resume not found or does not belong to user");
-      }
-
-      // Unset all defaults for this user
-      await Resume.updateMany(
-        { userId, isDefault: true },
-        { isDefault: false },
-      );
-
-      // Set the new default
-      const updated = await Resume.findByIdAndUpdate(
-        resumeId,
-        { isDefault: true },
-        { new: true },
-      );
-
-      logger.info("Default resume set", { userId, resumeId });
-      return updated;
-    } catch (error) {
-      logger.error("Failed to set default resume", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        userId,
-        resumeId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Delete resume (soft delete)
-   */
-  async deleteResume(resumeId: string, userId: string): Promise<boolean> {
-    try {
-      if (!mongoose.Types.ObjectId.isValid(resumeId)) {
-        throw new Error("Invalid resume ID");
-      }
-
-      const resume = await Resume.findOne({ _id: resumeId, userId });
-      if (!resume) {
-        throw new Error("Resume not found or does not belong to user");
-      }
-
-      const result = await Resume.findByIdAndUpdate(
-        resumeId,
-        { isActive: false },
-        { new: true },
-      );
-
-      logger.info("Resume deleted", { resumeId, userId });
-      return !!result;
-    } catch (error) {
-      logger.error("Failed to delete resume", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        resumeId,
-        userId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Permanently delete resume
-   */
-  async permanentDeleteResume(
-    resumeId: string,
-    userId: string,
-  ): Promise<boolean> {
-    try {
-      if (!mongoose.Types.ObjectId.isValid(resumeId)) {
-        throw new Error("Invalid resume ID");
-      }
-
-      const result = await Resume.findOneAndDelete({ _id: resumeId, userId });
-
-      if (result) {
-        logger.info("Resume permanently deleted", { resumeId, userId });
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      logger.error("Failed to permanently delete resume", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        resumeId,
-        userId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Update resume analysis
-   */
-  async updateAnalysis(
-    resumeId: string,
-    userId: string,
-    analysisData: {
-      score: number;
-      strengths: string[];
-      weaknesses: string[];
-      suggestions: string[];
-    },
-  ): Promise<IResume | null> {
-    try {
-      if (!mongoose.Types.ObjectId.isValid(resumeId)) {
-        throw new Error("Invalid resume ID");
-      }
-
-      const resume = await Resume.findOne({ _id: resumeId, userId });
-      if (!resume) {
-        throw new Error("Resume not found or does not belong to user");
-      }
-
-      const updated = await Resume.findByIdAndUpdate(
-        resumeId,
-        {
-          analysis: {
-            ...analysisData,
-            lastAnalyzedAt: new Date(),
-          },
-        },
-        { new: true },
-      );
-
-      logger.info("Resume analysis updated", { resumeId, userId });
-      return updated;
-    } catch (error) {
-      logger.error("Failed to update resume analysis", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        resumeId,
-        userId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Search resumes by skills
-   */
-  async searchBySkills(skills: string[]): Promise<IResume[]> {
-    try {
-      if (!skills || skills.length === 0) {
-        throw new Error("Skills array is required");
-      }
-
-      return Resume.find({
-        isActive: true,
-        skills: { $in: skills },
-      })
-        .populate("userId", "username email")
-        .sort({ "experience.years": -1 })
-        .exec();
-    } catch (error) {
-      logger.error("Failed to search resumes by skills", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        skills,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Search resumes by text
-   */
-  async searchByText(searchTerm: string): Promise<IResume[]> {
-    try {
-      if (!searchTerm || searchTerm.trim().length === 0) {
-        throw new Error("Search term is required");
-      }
-
-      return Resume.find(
-        { $text: { $search: searchTerm }, isActive: true },
-        { score: { $meta: "textScore" } },
-      )
-        .sort({ score: { $meta: "textScore" } })
-        .populate("userId", "username email")
-        .exec();
-    } catch (error) {
-      logger.error("Failed to search resumes by text", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        searchTerm,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Clone a resume
-   */
-  async cloneResume(
-    resumeId: string,
-    userId: string,
-    newTitle?: string,
-  ): Promise<IResume> {
-    try {
-      if (!mongoose.Types.ObjectId.isValid(resumeId)) {
-        throw new Error("Invalid resume ID");
-      }
-
-      const original = await Resume.findOne({ _id: resumeId, userId });
-      if (!original) {
-        throw new Error("Resume not found or does not belong to user");
-      }
-
-      const clonedData = original.toObject();
-
-      // ✅ Use type assertion to bypass TypeScript checking
-      const { _id, createdAt, updatedAt, analysis, ...rest } =
-        clonedData as any;
-
-      const resume = new Resume({
-        ...rest,
-        title: newTitle || `${original.title} (Copy)`,
-        version: 1,
-        isDefault: false,
-        isActive: true,
-      });
-
-      await resume.save();
-
-      logger.info("Resume cloned", { originalId: resumeId, newId: resume._id });
-      return resume;
-    } catch (error) {
-      logger.error("Failed to clone resume", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        resumeId,
-        userId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Get user resume statistics
-   */
-  async getUserStats(userId: string): Promise<{
-    total: number;
-    active: number;
-    hasDefault: boolean;
-    defaultResume: IResume | null;
-    latestResume: IResume | null;
-    byLevel: Record<string, number>;
-  }> {
-    try {
-      const [total, active, defaultResume, latestResume, byLevel] =
-        await Promise.all([
-          Resume.countDocuments({ userId }),
-          Resume.countDocuments({ userId, isActive: true }),
-          Resume.findOne({ userId, isDefault: true, isActive: true }),
-          Resume.findOne({ userId, isActive: true }).sort({ createdAt: -1 }),
-          Resume.aggregate([
-            {
-              $match: {
-                userId: new mongoose.Types.ObjectId(userId),
-                isActive: true,
-              },
-            },
-            { $group: { _id: "$experience.level", count: { $sum: 1 } } },
-          ]),
-        ]);
-
-      const levelMap: Record<string, number> = {
-        entry: 0,
-        mid: 0,
-        senior: 0,
-        lead: 0,
-      };
-
-      byLevel.forEach((item: any) => {
-        levelMap[item._id] = item.count;
-      });
-
-      return {
-        total,
-        active,
-        hasDefault: !!defaultResume,
-        defaultResume,
-        latestResume,
-        byLevel: levelMap,
-      };
-    } catch (error) {
-      logger.error("Failed to get user resume stats", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        userId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Bulk delete resumes
-   */
-  async bulkDeleteResumes(
-    resumeIds: string[],
-    userId: string,
-  ): Promise<{
-    deleted: number;
-    failed: string[];
-  }> {
-    try {
-      const failed: string[] = [];
-      let deleted = 0;
-
-      for (const id of resumeIds) {
-        try {
-          const result = await this.deleteResume(id, userId);
-          if (result) {
-            deleted++;
-          } else {
-            failed.push(id);
-          }
-        } catch (error) {
-          failed.push(id);
-          logger.error("Failed to delete resume in bulk", {
-            error: error instanceof Error ? error.message : "Unknown error",
-            resumeId: id,
-            userId,
+            return cleanedItem;
           });
-        }
       }
+    });
 
-      return { deleted, failed };
-    } catch (error) {
-      logger.error("Failed to bulk delete resumes", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        resumeIds,
-        userId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Validate resume ownership
-   */
-  async validateOwnership(resumeId: string, userId: string): Promise<boolean> {
-    try {
-      const resume = await Resume.findOne({ _id: resumeId, userId });
-      return !!resume;
-    } catch (error) {
-      logger.error("Failed to validate resume ownership", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        resumeId,
-        userId,
-      });
-      return false;
-    }
+    return clean;
   }
 }
 

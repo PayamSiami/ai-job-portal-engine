@@ -5,64 +5,9 @@ import { protect, authorize } from "../middleware/authMiddleware.js";
 
 const router: Router = express.Router();
 
-// Define types
-interface ParamsDictionary {
-  id?: string;
-}
-
-/**
- * @swagger
- * /api/jobs/employer:
- *   get:
- *     summary: Get all jobs posted by the current employer
- *     tags: [Jobs]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of employer's jobs
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 jobs:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Job'
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     total:
- *                       type: integer
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - employer role required
- *       500:
- *         description: Server error
- */
-router.get(
-  "/employer",
-  protect,
-  authorize("employer"),
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = (req as any).user?.id;
-      if (!userId) {
-        res.status(401).json({ error: "User not authenticated" });
-        return;
-      }
-
-      const jobs = await jobService.getJobsByEmployer(userId);
-      res.json(jobs);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch employer jobs";
-      res.status(500).json({ error: errorMessage });
-    }
-  },
-);
+// ============================================
+// 🟢 PUBLIC ROUTES (No authentication required)
+// ============================================
 
 /**
  * @swagger
@@ -70,8 +15,6 @@ router.get(
  *   get:
  *     summary: Get all jobs with filtering and pagination
  *     tags: [Jobs]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -159,12 +102,10 @@ router.get(
  *                       type: integer
  *                     totalPages:
  *                       type: integer
- *       401:
- *         description: Unauthorized
  *       500:
  *         description: Server error
  */
-router.get("/", protect, async (req: Request, res: Response): Promise<void> => {
+router.get("/", async (req: Request, res: Response): Promise<void> => {
   try {
     const { page = 1, limit = 10, ...filters } = req.query;
     const jobs = await jobService.getJobs(filters, {
@@ -181,82 +122,39 @@ router.get("/", protect, async (req: Request, res: Response): Promise<void> => {
 
 /**
  * @swagger
- * /api/jobs/search/ai:
+ * /api/jobs/employer:
  *   get:
- *     summary: AI-powered natural language job search
- *     tags: [AI, Jobs]
+ *     summary: Get all jobs posted by the current employer
+ *     tags: [Jobs]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: query
- *         required: true
- *         schema:
- *           type: string
- *         description: Natural language search query
- *         example: "Remote senior React developer jobs with salary above 120k"
  *     responses:
  *       200:
- *         description: AI search results with parsed filters
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 query:
- *                   type: string
- *                 parsedFilters:
- *                   type: object
- *                 results:
- *                   type: object
- *                   properties:
- *                     jobs:
- *                       type: array
- *                       items:
- *                         $ref: '#/components/schemas/Job'
- *                     pagination:
- *                       type: object
- *       400:
- *         description: Search query is required
- *       500:
- *         description: AI search failed
+ *         description: List of employer's jobs
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - employer role required
  */
 router.get(
-  "/search/ai",
+  "/employer",
   protect,
+  authorize("employer"),
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { query } = req.query;
-
-      if (!query || typeof query !== "string" || query.trim() === "") {
-        res.status(400).json({ error: "Search query is required" });
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
         return;
       }
-
-      // Step 1: Parse natural language query using AI
-      const parsedFilters =
-        await jobSearchService.parseNaturalLanguageQuery(query);
-
-      // Step 2: Search jobs using parsed filters
-      const searchResults = await jobSearchService.searchJobs(parsedFilters);
-
-      // Step 3: Get actual jobs from database using the MongoDB query directly
-      const jobs = await jobService.getJobsWithMongoQuery(searchResults.where, {
-        page: 1,
-        limit: 20,
-      });
-
-      res.json({
-        query,
-        parsedFilters,
-        results: jobs,
-      });
+      const jobs = await jobService.getJobsByEmployer(userId);
+      res.json(jobs);
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : "AI search failed";
+        error instanceof Error ? error.message : "Failed to fetch employer jobs";
       res.status(500).json({ error: errorMessage });
     }
-  },
+  }
 );
 
 /**
@@ -265,8 +163,6 @@ router.get(
  *   get:
  *     summary: Get a single job by ID
  *     tags: [Jobs]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -287,7 +183,6 @@ router.get(
  */
 router.get(
   "/:id",
-  protect,
   async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     try {
       const job = await jobService.getJobById(req.params.id);
@@ -301,7 +196,66 @@ router.get(
         error instanceof Error ? error.message : "Failed to fetch job";
       res.status(500).json({ error: errorMessage });
     }
-  },
+  }
+);
+
+// ============================================
+// 🔵 PROTECTED ROUTES (Authentication required)
+// ============================================
+
+/**
+ * @swagger
+ * /api/jobs/search/ai:
+ *   get:
+ *     summary: AI-powered natural language job search
+ *     tags: [AI, Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: AI search results
+ *       400:
+ *         description: Search query is required
+ *       500:
+ *         description: AI search failed
+ */
+router.get(
+  "/search/ai",
+  protect,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { query } = req.query;
+
+      if (!query || typeof query !== "string" || query.trim() === "") {
+        res.status(400).json({ error: "Search query is required" });
+        return;
+      }
+
+      const parsedFilters =
+        await jobSearchService.parseNaturalLanguageQuery(query);
+      const searchResults = await jobSearchService.searchJobs(parsedFilters);
+      const jobs = await jobService.getJobsWithMongoQuery(searchResults.where, {
+        page: 1,
+        limit: 20,
+      });
+
+      res.json({
+        query,
+        parsedFilters,
+        results: jobs,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "AI search failed";
+      res.status(500).json({ error: errorMessage });
+    }
+  }
 );
 
 /**
@@ -321,18 +275,12 @@ router.get(
  *     responses:
  *       201:
  *         description: Job created successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Job'
  *       400:
  *         description: Validation error
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Forbidden - employer role required
- *       500:
- *         description: Server error
  */
 router.post(
   "/",
@@ -352,7 +300,7 @@ router.post(
         error instanceof Error ? error.message : "Failed to create job";
       res.status(400).json({ error: errorMessage });
     }
-  },
+  }
 );
 
 /**
@@ -372,18 +320,12 @@ router.post(
  *     responses:
  *       200:
  *         description: Generated job content
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/GenerateJobContentResponse'
  *       400:
  *         description: Job title is required
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Forbidden - employer role required
- *       500:
- *         description: Failed to generate job content
  */
 router.post(
   "/generate-content",
@@ -410,7 +352,7 @@ router.post(
           : "Failed to generate job content";
       res.status(500).json({ error: errorMessage });
     }
-  },
+  }
 );
 
 export default router;

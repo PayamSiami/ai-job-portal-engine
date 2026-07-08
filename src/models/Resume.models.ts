@@ -1,41 +1,97 @@
-// src/models/Resume.model.ts
 import mongoose, { Schema, Document } from "mongoose";
 
-// Define Resume interface
 export interface IResume extends Document {
-  userId: mongoose.Types.ObjectId;
+  user: mongoose.Types.ObjectId;
   title: string;
-  content: string;
-  version: number;
-  isActive: boolean;
   isDefault: boolean;
-  skills: string[];
-  experience: {
-    years: number;
-    level: "entry" | "mid" | "senior" | "lead";
+  template: "modern" | "classic" | "minimal" | "creative";
+  visibility: "private" | "public" | "shared";
+  status: "draft" | "active" | "archived";
+  personalInfo: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    location?: string;
+    website?: string;
+    linkedin?: string;
+    github?: string;
+    summary?: string;
+    title?: string;
   };
-  education: {
-    degree: string;
-    field: string;
+  experience: Array<{
+    _id?: mongoose.Types.ObjectId;
+    company: string;
+    position: string;
+    location?: string;
+    startDate: Date;
+    endDate?: Date;
+    current: boolean;
+    description?: string;
+    achievements?: string[];
+  }>;
+  education: Array<{
+    _id?: mongoose.Types.ObjectId;
     institution: string;
-  };
-  summary: string;
-  analysis?: {
-    score: number;
-    strengths: string[];
-    weaknesses: string[];
-    suggestions: string[];
-    lastAnalyzedAt: Date;
+    degree: string;
+    fieldOfStudy?: string;
+    location?: string;
+    startDate: Date;
+    endDate?: Date;
+    current: boolean;
+    description?: string;
+    gpa?: number;
+  }>;
+  skills: Array<{
+    _id?: mongoose.Types.ObjectId;
+    name: string;
+    level?: "beginner" | "intermediate" | "advanced" | "expert";
+    category?: string;
+  }>;
+  certifications: Array<{
+    _id?: mongoose.Types.ObjectId;
+    name: string;
+    issuer: string;
+    date: Date;
+    expiryDate?: Date;
+    credentialId?: string;
+    url?: string;
+  }>;
+  languages: Array<{
+    _id?: mongoose.Types.ObjectId;
+    name: string;
+    proficiency: "basic" | "conversational" | "professional" | "native";
+  }>;
+  projects: Array<{
+    _id?: mongoose.Types.ObjectId;
+    name: string;
+    description?: string;
+    url?: string;
+    technologies?: string[];
+    startDate?: Date;
+    endDate?: Date;
+  }>;
+  customSections: Array<{
+    _id?: mongoose.Types.ObjectId;
+    title: string;
+    content: string;
+    order: number;
+  }>;
+  pdfFile?: {
+    filename: string;
+    path: string;
+    size: number;
+    mimeType: string;
+    uploadedAt: Date;
   };
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Define schema
 const resumeSchema = new Schema<IResume>(
   {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
+    user: {
+      type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
@@ -44,52 +100,123 @@ const resumeSchema = new Schema<IResume>(
       required: true,
       trim: true,
     },
-    content: {
-      type: String,
-      required: true,
-    },
-    version: {
-      type: Number,
-      default: 1,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
     isDefault: {
       type: Boolean,
       default: false,
     },
-    skills: {
-      type: [String],
-      default: [],
-    },
-    experience: {
-      years: {
-        type: Number,
-        default: 0,
-      },
-      level: {
-        type: String,
-        enum: ["entry", "mid", "senior", "lead"],
-        default: "entry",
-      },
-    },
-    education: {
-      degree: String,
-      field: String,
-      institution: String,
-    },
-    summary: {
+    template: {
       type: String,
-      default: "",
+      enum: ["modern", "classic", "minimal", "creative"],
+      default: "modern",
     },
-    analysis: {
-      score: Number,
-      strengths: [String],
-      weaknesses: [String],
-      suggestions: [String],
-      lastAnalyzedAt: Date,
+    visibility: {
+      type: String,
+      enum: ["private", "public", "shared"],
+      default: "private",
+    },
+    status: {
+      type: String,
+      enum: ["draft", "active", "archived"],
+      default: "draft",
+    },
+    personalInfo: {
+      firstName: { type: String, default: "" },
+      lastName: { type: String, default: "" },
+      email: { type: String, default: "" },
+      phone: { type: String, default: "" },
+      location: { type: String, default: "" },
+      website: { type: String, default: "" },
+      linkedin: { type: String, default: "" },
+      github: { type: String, default: "" },
+      summary: { type: String, default: "" },
+      title: { type: String, default: "" },
+    },
+    experience: [
+      {
+        _id: { type: Schema.Types.ObjectId, auto: true },
+        company: { type: String, required: true },
+        position: { type: String, required: true },
+        location: String,
+        startDate: { type: Date, required: true },
+        endDate: Date,
+        current: { type: Boolean, default: false },
+        description: String,
+        achievements: [String],
+      },
+    ],
+    education: [
+      {
+        _id: { type: Schema.Types.ObjectId, auto: true },
+        institution: { type: String, required: true },
+        degree: { type: String, required: true },
+        fieldOfStudy: String,
+        location: String,
+        startDate: { type: Date, required: true },
+        endDate: Date,
+        current: { type: Boolean, default: false },
+        description: String,
+        gpa: Number,
+      },
+    ],
+    skills: [
+      {
+        _id: { type: Schema.Types.ObjectId, auto: true },
+        name: { type: String, required: true },
+        level: {
+          type: String,
+          enum: ["beginner", "intermediate", "advanced", "expert"],
+          default: "intermediate",
+        },
+        category: String,
+      },
+    ],
+    certifications: [
+      {
+        _id: { type: Schema.Types.ObjectId, auto: true },
+        name: { type: String, required: true },
+        issuer: { type: String, required: true },
+        date: { type: Date, required: true },
+        expiryDate: Date,
+        credentialId: String,
+        url: String,
+      },
+    ],
+    languages: [
+      {
+        _id: { type: Schema.Types.ObjectId, auto: true },
+        name: { type: String, required: true },
+        proficiency: {
+          type: String,
+          enum: ["basic", "conversational", "professional", "native"],
+          required: true,
+        },
+      },
+    ],
+    projects: [
+      {
+        _id: { type: Schema.Types.ObjectId, auto: true },
+        name: { type: String, required: true },
+        description: String,
+        url: String,
+        technologies: [String],
+        startDate: Date,
+        endDate: Date,
+      },
+    ],
+    customSections: [
+      {
+        _id: { type: Schema.Types.ObjectId, auto: true },
+        title: { type: String, required: true },
+        content: { type: String, required: true },
+        order: Number,
+      },
+    ],
+    pdfFile: {
+      filename: String,
+      path: String,
+      size: Number,
+      mimeType: String,
+      uploadedAt: Date,
     },
   },
   {
@@ -97,26 +224,11 @@ const resumeSchema = new Schema<IResume>(
   },
 );
 
-// ✅ FIX 1: Remove 'next' parameter when using async/await
-resumeSchema.pre("save", async function (this: IResume) {
-  if (this.isModified("content")) {
-    this.version += 1;
-  }
-});
+// Indexes
+resumeSchema.index({ user: 1, isDefault: 1 });
+resumeSchema.index({ user: 1, status: 1 });
+resumeSchema.index({ user: 1, createdAt: -1 });
 
-// ✅ FIX 2: Remove 'next' parameter when using async/await
-resumeSchema.pre("save", async function (this: IResume) {
-  if (this.isDefault) {
-    await mongoose
-      .model("Resume")
-      .updateMany(
-        { userId: this.userId, _id: { $ne: this._id }, isDefault: true },
-        { isDefault: false },
-      );
-  }
-});
-
-// Create and export model
 const Resume = mongoose.model<IResume>("Resume", resumeSchema);
 
 export default Resume;

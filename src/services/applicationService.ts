@@ -5,7 +5,7 @@ import Application, {
 } from "../models/Application.model.js";
 import Job from "../models/Job.models.js";
 import Resume from "../models/Resume.models.js";
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger.js";
 import User from "../models/User.models.js";
 
@@ -79,31 +79,24 @@ class ApplicationService {
         applicantId: data.applicantId,
       });
 
-      // Validate inputs
-      await this.validateApplicationData(data);
-
-      // Check if user already applied to this job
-      const existingApplication = await Application.findOne({
-        jobId: data.jobId,
-        applicantId: data.applicantId,
-      });
-
-      if (existingApplication) {
-        throw new Error("You have already applied to this job");
+      // Validate required fields
+      if (!data.jobId) throw new Error("Job ID is required");
+      if (!data.applicantId) throw new Error("Applicant ID is required");
+      if (!data.resumeId) throw new Error("Resume ID is required");
+      if (!data.coverLetter || data.coverLetter.length < 50) {
+        throw new Error("Cover letter must be at least 50 characters");
       }
 
-      // Create application
+      // Create the application
       const application = new Application({
-        jobId: data.jobId,
-        applicantId: data.applicantId,
-        resumeId: data.resumeId,
+        jobId: new Types.ObjectId(data.jobId),
+        applicantId: new Types.ObjectId(data.applicantId),
+        resumeId: new Types.ObjectId(data.resumeId),
         coverLetter: data.coverLetter,
         expectedSalary: data.expectedSalary,
-        availableFrom: data.availableFrom
-          ? new Date(data.availableFrom)
-          : undefined,
-        status: ApplicationStatus.PENDING,
-        appliedAt: new Date(),
+        availableFrom: data.availableFrom,
+        status: "pending",
+        createdAt: new Date(),
         updatedAt: new Date(),
       });
 
@@ -112,12 +105,10 @@ class ApplicationService {
       logger.info("Application created successfully", {
         applicationId: application._id,
       });
+
       return application;
     } catch (error) {
-      logger.error("Failed to create application", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        data,
-      });
+      logger.error("Failed to create application:", error);
       throw error;
     }
   }
@@ -581,37 +572,6 @@ class ApplicationService {
   }
 
   // ============ Private Helper Methods ============
-
-  private async validateApplicationData(
-    data: CreateApplicationData,
-  ): Promise<void> {
-    // Validate job exists
-    const job = await Job.findById(data.jobId);
-    if (!job) {
-      throw new Error("Job not found");
-    }
-
-    // Validate user exists
-    const user = await User.findById(data.applicantId);
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    // Validate resume exists and belongs to user
-    const resume = await Resume.findById(data.resumeId);
-    if (!resume) {
-      throw new Error("Resume not found");
-    }
-
-    if (resume.userId.toString() !== data.applicantId) {
-      throw new Error("Resume does not belong to the applicant");
-    }
-
-    // Check if job is active
-    if (!job.isActive) {
-      throw new Error("This job is no longer accepting applications");
-    }
-  }
 
   private validateStatusTransition(
     currentStatus: ApplicationStatus,
