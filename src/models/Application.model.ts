@@ -13,7 +13,7 @@ export enum ApplicationStatus {
 
 export interface IApplication extends Document {
   jobId: mongoose.Types.ObjectId;
-  applicantId: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
   resumeId?: mongoose.Types.ObjectId;
   coverLetter?: string;
   expectedSalary?: number;
@@ -36,7 +36,7 @@ const applicationSchema = new Schema<IApplication>(
       ref: "Job",
       required: true,
     },
-    applicantId: {
+    userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
@@ -79,8 +79,8 @@ const applicationSchema = new Schema<IApplication>(
 );
 
 // Create indexes
-applicationSchema.index({ jobId: 1, applicantId: 1 }, { unique: true });
-applicationSchema.index({ applicantId: 1 });
+applicationSchema.index({ jobId: 1, userId: 1 }, { unique: true });
+applicationSchema.index({ userId: 1 });
 applicationSchema.index({ jobId: 1 });
 applicationSchema.index({ status: 1 });
 applicationSchema.index({ appliedAt: -1 });

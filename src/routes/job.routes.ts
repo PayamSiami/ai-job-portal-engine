@@ -2,6 +2,7 @@ import express, { Request, Response, Router } from "express";
 import jobService from "../services/jobService.js";
 import jobSearchService from "../services/ai/jobSearchService.js";
 import { protect, authorize } from "../middleware/authMiddleware.js";
+import { EmployerController } from "../controllers/employer.controller.js";
 
 const router: Router = express.Router();
 
@@ -122,43 +123,6 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
 
 /**
  * @swagger
- * /api/jobs/employer:
- *   get:
- *     summary: Get all jobs posted by the current employer
- *     tags: [Jobs]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of employer's jobs
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - employer role required
- */
-router.get(
-  "/employer",
-  protect,
-  authorize("employer"),
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = (req as any).user?.id;
-      if (!userId) {
-        res.status(401).json({ error: "User not authenticated" });
-        return;
-      }
-      const jobs = await jobService.getJobsByEmployer(userId);
-      res.json(jobs);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch employer jobs";
-      res.status(500).json({ error: errorMessage });
-    }
-  }
-);
-
-/**
- * @swagger
  * /api/jobs/{id}:
  *   get:
  *     summary: Get a single job by ID
@@ -196,7 +160,7 @@ router.get(
         error instanceof Error ? error.message : "Failed to fetch job";
       res.status(500).json({ error: errorMessage });
     }
-  }
+  },
 );
 
 // ============================================
@@ -255,7 +219,7 @@ router.get(
         error instanceof Error ? error.message : "AI search failed";
       res.status(500).json({ error: errorMessage });
     }
-  }
+  },
 );
 
 /**
@@ -293,14 +257,14 @@ router.post(
         res.status(401).json({ error: "User not authenticated" });
         return;
       }
-      const job = await jobService.createJob(req.body, userId);
+      const job = await jobService.createJob(userId, req.body);
       res.status(201).json(job);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to create job";
       res.status(400).json({ error: errorMessage });
     }
-  }
+  },
 );
 
 /**
@@ -344,7 +308,11 @@ router.post(
       }
 
       const jobContent = await jobService.generateJobContent(jobTitle);
-      res.json(jobContent);
+
+      res.json({
+        success: true,
+        data: jobContent,
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -352,7 +320,36 @@ router.post(
           : "Failed to generate job content";
       res.status(500).json({ error: errorMessage });
     }
-  }
+  },
 );
 
+router.get(
+  "/employer/analytics",
+  protect,
+  authorize("employer"),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const employerId = (req as any).user?.id;
+      const { timeRange = "30d" } = req.query;
+
+      // ✅ Call the service
+      const analytics = await jobService.getJobAnalytics(
+        employerId,
+        timeRange as string,
+      );
+
+      res.status(200).json({
+        success: true,
+        data: analytics,
+      });
+    } catch (error) {
+      console.error("❌ Error in getJobAnalytics:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch job analytics",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  },
+);
 export default router;

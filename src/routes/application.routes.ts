@@ -1,43 +1,21 @@
+// backend/src/routes/application.routes.ts
 import express, { Request, Response, Router } from "express";
 import applicationService from "../services/applicationService.js";
 import applicationScreeningService from "../services/ai/applicationScreening.js";
 import jobService from "../services/jobService.js";
 import resumeService from "../services/resumeService.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { authorize, protect } from "../middleware/authMiddleware.js";
 import logger from "../utils/logger.js";
+import { getStringParam, getUserId } from "../utils/routeHelpers.js";
+import { ApplicationStatus } from "../models/Application.model.js";
 
 const router: Router = express.Router();
 
-// ✅ Helper to safely get string parameter
-const getStringParam = (param: string | string[] | undefined): string => {
-  if (!param) return "";
-  if (Array.isArray(param)) return param[0] || "";
-  return param;
-};
+// ==================== Helper Functions ====================
 
-// ✅ Helper to get user ID from request
-const getUserId = (req: Request): string | null => {
-  const user = (req as any).user;
-  if (!user) return null;
-  return user.id?.toString() || null;
-};
-
-// ✅ Helper to map job to job details
-const mapJobToJobDetails = (job: any) => ({
-  title: job.title || "",
-  company: job.company || "",
-  location: job.location || "",
-  requirements: job.requirements || "",
-  description: job.description || "",
-  minSalary: job.minSalary,
-  maxSalary: job.maxSalary,
-  benefits: job.benefits,
-  department: job.department,
-  employmentType: job.employmentType,
-  experienceLevel: job.experienceLevel,
-});
-
-// ✅ Helper to build resume content from structured data
+/**
+ * Build resume content from structured resume data for AI screening
+ */
 const buildResumeContent = (resume: any): string => {
   const parts: string[] = [];
 
@@ -45,7 +23,9 @@ const buildResumeContent = (resume: any): string => {
   const { personalInfo } = resume;
   if (personalInfo) {
     if (personalInfo.firstName || personalInfo.lastName) {
-      parts.push(`Name: ${personalInfo.firstName || ""} ${personalInfo.lastName || ""}`);
+      parts.push(
+        `Name: ${personalInfo.firstName || ""} ${personalInfo.lastName || ""}`,
+      );
     }
     if (personalInfo.email) parts.push(`Email: ${personalInfo.email}`);
     if (personalInfo.phone) parts.push(`Phone: ${personalInfo.phone}`);
@@ -60,8 +40,14 @@ const buildResumeContent = (resume: any): string => {
     resume.experience.forEach((exp: any) => {
       parts.push(`- ${exp.position} at ${exp.company}`);
       if (exp.location) parts.push(`  Location: ${exp.location}`);
-      const startDate = exp.startDate ? new Date(exp.startDate).toLocaleDateString() : '';
-      const endDate = exp.current ? 'Present' : (exp.endDate ? new Date(exp.endDate).toLocaleDateString() : '');
+      const startDate = exp.startDate
+        ? new Date(exp.startDate).toLocaleDateString()
+        : "";
+      const endDate = exp.current
+        ? "Present"
+        : exp.endDate
+          ? new Date(exp.endDate).toLocaleDateString()
+          : "";
       if (startDate || endDate) {
         parts.push(`  ${startDate} - ${endDate}`);
       }
@@ -78,8 +64,14 @@ const buildResumeContent = (resume: any): string => {
     resume.education.forEach((edu: any) => {
       parts.push(`- ${edu.degree} from ${edu.institution}`);
       if (edu.fieldOfStudy) parts.push(`  ${edu.fieldOfStudy}`);
-      const startDate = edu.startDate ? new Date(edu.startDate).toLocaleDateString() : '';
-      const endDate = edu.current ? 'Present' : (edu.endDate ? new Date(edu.endDate).toLocaleDateString() : '');
+      const startDate = edu.startDate
+        ? new Date(edu.startDate).toLocaleDateString()
+        : "";
+      const endDate = edu.current
+        ? "Present"
+        : edu.endDate
+          ? new Date(edu.endDate).toLocaleDateString()
+          : "";
       if (startDate || endDate) {
         parts.push(`  ${startDate} - ${endDate}`);
       }
@@ -91,7 +83,7 @@ const buildResumeContent = (resume: any): string => {
   if (resume.skills && resume.skills.length > 0) {
     parts.push("\nSkills:");
     resume.skills.forEach((skill: any) => {
-      const level = skill.level ? ` (${skill.level})` : '';
+      const level = skill.level ? ` (${skill.level})` : "";
       parts.push(`- ${skill.name}${level}`);
     });
   }
@@ -131,31 +123,12 @@ const buildResumeContent = (resume: any): string => {
   return parts.join("\n");
 };
 
+// ==================== Routes ====================
+
 /**
- * @swagger
- * /api/applications:
- *   post:
- *     summary: Apply for a job with AI screening
- *     tags: [Applications, AI]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateApplicationRequest'
- *     responses:
- *       201:
- *         description: Application created with AI screening
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Application'
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Failed to create application
+ * POST /api/applications
+ * Apply for a job with AI screening
+ * ✅ Only authenticated job seekers can apply
  */
 router.post(
   "/",
@@ -166,12 +139,13 @@ router.post(
       const { jobId, resumeId, coverLetter, expectedSalary, availableFrom } =
         req.body;
 
+      // ✅ Validate user
       if (!userId) {
         res.status(401).json({ error: "User not authenticated" });
         return;
       }
 
-      // Validate required fields
+      // ✅ Validate required fields
       if (!jobId) {
         res.status(400).json({ error: "Job ID is required" });
         return;
@@ -181,48 +155,64 @@ router.post(
         return;
       }
       if (!coverLetter || coverLetter.length < 50) {
-        res
-          .status(400)
-          .json({ error: "Cover letter must be at least 50 characters" });
+        res.status(400).json({
+          error: "Cover letter must be at least 50 characters",
+        });
         return;
       }
 
-      // Get the resume by ID with user validation
-      const resume = await resumeService.getResume(resumeId, userId);
-      if (!resume) {
-        res.status(404).json({ error: "Resume not found" });
-        return;
-      }
-
-      // Get the job
+      // ✅ Get the job first (validate it exists and is open)
       const job = await jobService.getJobById(jobId);
       if (!job) {
         res.status(404).json({ error: "Job not found" });
         return;
       }
 
-      // Create the application
+      // ✅ Check if job is still open
+      if (!job.isActive) {
+        res.status(400).json({
+          error: "This job is no longer accepting applications",
+        });
+        return;
+      }
+
+      // ✅ Check if user already applied
+      const existingApplication =
+        await applicationService.findByJobAndCandidate(jobId, userId);
+      if (existingApplication) {
+        res.status(400).json({
+          error: "You have already applied for this job",
+        });
+        return;
+      }
+
+      // ✅ Get the resume with ownership validation
+      const resume = await resumeService.getResume(resumeId, userId);
+      if (!resume) {
+        res.status(404).json({ error: "Resume not found" });
+        return;
+      }
+
+      // ✅ Create the application
       const application = await applicationService.createApplication({
         jobId,
-        applicantId: userId,
+        userId: userId,
         resumeId,
         coverLetter,
         expectedSalary,
         availableFrom,
       });
 
-      // ✅ Check if application was created successfully
       if (!application || !application._id) {
         logger.error("Application creation failed - no _id returned");
         res.status(500).json({ error: "Failed to create application" });
         return;
       }
 
-      // Build content from structured resume data
-      const resumeContent = buildResumeContent(resume);
-
-      // Run AI screening
+      // ✅ Run AI screening asynchronously
       try {
+        const resumeContent = buildResumeContent(resume);
+
         const jobDetails = {
           title: job.title || "",
           company: job.company || "",
@@ -248,10 +238,9 @@ router.post(
             jobDetails,
           );
 
-        // ✅ Use the application _id safely
         const applicationId = application._id.toString();
-        
-        // Update application with AI results
+
+        // ✅ Update application with AI results
         await applicationService.updateApplication(applicationId, {
           aiScore: screeningResult.score,
           aiExplanation: screeningResult.explanation,
@@ -260,11 +249,10 @@ router.post(
           aiRecommendation: screeningResult.recommendation,
         });
 
-        // Get updated application
-        const updatedApplication = await applicationService.getApplicationById(
-          applicationId,
-        );
-        
+        // ✅ Get updated application
+        const updatedApplication =
+          await applicationService.getApplicationById(applicationId);
+
         res.status(201).json({
           success: true,
           data: updatedApplication || application,
@@ -273,7 +261,7 @@ router.post(
         return;
       } catch (aiError) {
         logger.error("AI screening failed:", aiError);
-        // Return application without AI screening
+        // ✅ Return application without AI screening
         res.status(201).json({
           success: true,
           data: application,
@@ -292,26 +280,9 @@ router.post(
 );
 
 /**
- * @swagger
- * /api/applications:
- *   get:
- *     summary: Get current user's applications
- *     tags: [Applications]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of user's applications
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Application'
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
+ * GET /api/applications
+ * Get current user's applications
+ * ✅ Only authenticated job seekers can view their applications
  */
 router.get("/", protect, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -324,7 +295,11 @@ router.get("/", protect, async (req: Request, res: Response): Promise<void> => {
 
     const applications =
       await applicationService.getApplicationsByApplicant(userId);
-    res.json(applications);
+
+    res.json({
+      success: true,
+      data: applications,
+    });
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to fetch applications";
@@ -333,38 +308,14 @@ router.get("/", protect, async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * @swagger
- * /api/applications/{id}:
- *   get:
- *     summary: Get application details (applicant or employer)
- *     tags: [Applications]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Application details
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Application'
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Access denied
- *       404:
- *         description: Application not found
- *       500:
- *         description: Server error
+ * GET /api/applications/employer
+ * Get applications for employer's jobs
+ * ✅ Only authenticated employers can view applications
  */
 router.get(
-  "/:id",
+  "/employer",
   protect,
+  authorize("employer"),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = getUserId(req);
@@ -374,7 +325,47 @@ router.get(
         return;
       }
 
+      const { jobId, status, limit = "20", page = "1" } = req.query;
+
+      const applications = await applicationService.getApplicationsByEmployer(
+        userId,
+        {
+          jobId: jobId as string,
+          status: status as string,
+          limit: parseInt(limit as string),
+          page: parseInt(page as string),
+        },
+      );
+
+      res.json({
+        success: true,
+        data: applications,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to fetch applications";
+      res.status(500).json({ error: errorMessage });
+    }
+  },
+);
+
+/**
+ * GET /api/applications/{id}
+ * Get application details (applicant or employer)
+ * ✅ Both job seekers and employers can view applications they're involved with
+ */
+router.get(
+  "/:id",
+  protect,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = getUserId(req);
       const applicationId = getStringParam(req.params.id);
+
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
 
       if (!applicationId) {
         res.status(400).json({ error: "Invalid application ID" });
@@ -389,20 +380,200 @@ router.get(
         return;
       }
 
-      // Convert ObjectId to string for comparison
+      // ✅ Check access: applicant or employer who posted the job
       const app = application as any;
-      const isApplicant = app.applicantId?.toString() === userId;
-      const isEmployer = app.job?.postedBy?.toString() === userId;
+      const isApplicant = app.userId?.toString() === userId;
+      const isEmployer = app.jobId?.postedBy?.toString() === userId;
 
       if (!isApplicant && !isEmployer) {
         res.status(403).json({ error: "Access denied" });
         return;
       }
 
-      res.json(application);
+      res.json({
+        success: true,
+        data: application,
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to fetch application";
+      res.status(500).json({ error: errorMessage });
+    }
+  },
+);
+
+/**
+ * PATCH /api/applications/{id}/status
+ * Update application status (Employer only)
+ * ✅ Only employers can update application status
+ */
+router.patch(
+  "/:id/status",
+  protect,
+  authorize("employer"),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = getUserId(req);
+      const applicationId = getStringParam(req.params.id);
+      const { status, notes } = req.body;
+
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      if (!applicationId) {
+        res.status(400).json({ error: "Invalid application ID" });
+        return;
+      }
+
+      if (!status) {
+        res.status(400).json({ error: "Status is required" });
+        return;
+      }
+
+      // ✅ Get application
+      const application =
+        await applicationService.getApplicationById(applicationId);
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      // ✅ Verify employer owns this application
+      const app = application as any;
+      if (app.jobId?.postedBy?.toString() !== userId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+
+      const validStatuses = Object.values(ApplicationStatus);
+      if (!validStatuses.includes(status)) {
+        res.status(400).json({
+          error: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+        });
+        return;
+      }
+
+      // ✅ Update status
+      const updated = await applicationService.updateApplicationStatus(
+        applicationId,
+        status,
+        notes,
+        userId,
+      );
+
+      // ✅ Trigger Kafka event for notification (handled in service)
+
+      res.json({
+        success: true,
+        message: `Application status updated to ${status}`,
+        data: updated,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to update status";
+      res.status(500).json({ error: errorMessage });
+    }
+  },
+);
+
+/**
+ * POST /api/applications/{id}/withdraw
+ * Withdraw application (Candidate only)
+ * ✅ Only job seekers can withdraw their own applications
+ */
+router.patch(
+  "/:id/withdraw",
+  protect,
+  authorize("job_seeker"),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = getUserId(req);
+      const applicationId = getStringParam(req.params.id);
+
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      if (!applicationId) {
+        res.status(400).json({ error: "Invalid application ID" });
+        return;
+      }
+
+      // ✅ Get application
+      const application =
+        await applicationService.getApplicationById(applicationId);
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      // ✅ Verify ownership
+      const app = application as any;
+      if (app.userId?.toString() !== userId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+
+      // ✅ Withdraw application
+      const updated = await applicationService.updateApplicationStatus(
+        applicationId,
+        ApplicationStatus.REJECTED,
+        "Candidate withdrew application",
+        userId,
+      );
+
+      res.json({
+        success: true,
+        message: "Application withdrawn successfully",
+        data: updated,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to withdraw application";
+      res.status(500).json({ error: errorMessage });
+    }
+  },
+);
+
+/**
+ * DELETE /api/applications/{id}
+ * Delete application (Admin only)
+ * ✅ Only admins can delete applications
+ */
+router.delete(
+  "/:id",
+  protect,
+  authorize("admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const applicationId = getStringParam(req.params.id);
+
+      if (!applicationId) {
+        res.status(400).json({ error: "Invalid application ID" });
+        return;
+      }
+
+      const application =
+        await applicationService.getApplicationById(applicationId);
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      await applicationService.deleteApplication(applicationId);
+
+      res.json({
+        success: true,
+        message: "Application deleted successfully",
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to delete application";
       res.status(500).json({ error: errorMessage });
     }
   },

@@ -198,16 +198,7 @@ class JobService {
   async getActiveJobs(): Promise<IJob[]> {
     return Job.find({ isActive: true }).sort({ createdAt: -1 }).exec();
   }
-
-  async getJobsByEmployer(employerId: string): Promise<IJob[]> {
-    if (!employerId) {
-      throw new Error("Employer ID is required");
-    }
-    return Job.find({ postedBy: employerId, isActive: true })
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
+  
   async searchJobsByTitle(searchTerm: string): Promise<IJob[]> {
     if (!searchTerm) {
       throw new Error("Search term is required");

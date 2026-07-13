@@ -1,3 +1,4 @@
+// src/app.ts
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -12,6 +13,7 @@ import jobRoutes from "./routes/job.routes.js";
 import applicationRoutes from "./routes/application.routes.js";
 import resumeRoutes from "./routes/resume.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import employerRoutes from "./routes/employer.routes.js";
 import { config } from "./config/index.js";
 import { swaggerSpec, swaggerUi } from "./config/swagger.js";
 
@@ -26,8 +28,8 @@ app.use(
       "http://localhost:5173",
     ],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   }),
 );
 app.use(
@@ -80,6 +82,7 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/resumes", resumeRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/employer", employerRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -97,11 +100,47 @@ app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-// Global error handler
+// ============ Global Error Handler ============
+// ✅ FIX: Ensure status is a number before using it
 app.use((err: any, req: any, res: any, next: any) => {
-  console.error("Error:", err);
-  res.status(err.status || 500).json({
-    error: err.message || "Internal server error",
+  console.error("❌ Error:", {
+    message: err.message,
+    statusCode: err.statusCode || err.status,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
+
+  // ✅ Ensure statusCode is a number
+  let statusCode = 500;
+  let message = "Internal server error";
+
+  // Check if error has a valid status code
+  if (err.statusCode && typeof err.statusCode === "number") {
+    statusCode = err.statusCode;
+    message = err.message || message;
+  } else if (err.status && typeof err.status === "number") {
+    statusCode = err.status;
+    message = err.message || message;
+  } else if (
+    err.status &&
+    typeof err.status === "string" &&
+    !isNaN(parseInt(err.status))
+  ) {
+    statusCode = parseInt(err.status);
+    message = err.message || message;
+  } else if (err.message) {
+    message = err.message;
+  }
+
+  // ✅ Send response with numeric status code
+  res.status(statusCode).json({
+    success: false,
+    message,
+    ...(process.env.NODE_ENV === "development" && {
+      stack: err.stack,
+      error: err,
+    }),
   });
 });
 

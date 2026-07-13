@@ -13,7 +13,7 @@ import User from "../models/User.models.js";
 
 export interface CreateApplicationData {
   jobId: string;
-  applicantId: string;
+  userId: string;
   resumeId: string;
   coverLetter?: string;
   expectedSalary?: number;
@@ -33,7 +33,7 @@ export interface UpdateApplicationData {
 export interface ApplicationFilters {
   status?: ApplicationStatus;
   jobId?: string;
-  applicantId?: string;
+  userId?: string;
   minScore?: number;
   maxScore?: number;
   fromDate?: Date;
@@ -76,12 +76,12 @@ class ApplicationService {
     try {
       logger.info("Creating new application", {
         jobId: data.jobId,
-        applicantId: data.applicantId,
+        userId: data.userId,
       });
 
       // Validate required fields
       if (!data.jobId) throw new Error("Job ID is required");
-      if (!data.applicantId) throw new Error("Applicant ID is required");
+      if (!data.userId) throw new Error("Applicant ID is required");
       if (!data.resumeId) throw new Error("Resume ID is required");
       if (!data.coverLetter || data.coverLetter.length < 50) {
         throw new Error("Cover letter must be at least 50 characters");
@@ -90,12 +90,13 @@ class ApplicationService {
       // Create the application
       const application = new Application({
         jobId: new Types.ObjectId(data.jobId),
-        applicantId: new Types.ObjectId(data.applicantId),
+        userId: new Types.ObjectId(data.userId),
         resumeId: new Types.ObjectId(data.resumeId),
         coverLetter: data.coverLetter,
         expectedSalary: data.expectedSalary,
         availableFrom: data.availableFrom,
-        status: "pending",
+        status: ApplicationStatus.PENDING,
+        appliedAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -113,6 +114,8 @@ class ApplicationService {
     }
   }
 
+  // src/services/applicationService.ts
+
   /**
    * Get application by ID with full population
    */
@@ -121,7 +124,6 @@ class ApplicationService {
     options: { populate?: boolean } = { populate: true },
   ): Promise<IApplication | null> {
     try {
-      // Validate ID
       if (!applicationId) {
         throw new Error("Application ID is required");
       }
@@ -130,36 +132,43 @@ class ApplicationService {
         throw new Error("Invalid application ID format");
       }
 
-      // Build query
+      // ✅ Build query
       let query = Application.findById(applicationId);
 
-      // Conditionally populate
       if (options.populate !== false) {
         query = query
           .populate({
             path: "jobId",
             select:
-              "title company location description requirements minSalary maxSalary workMode jobType isActive",
+              "title company location description requirements minSalary maxSalary workMode jobType isActive status skills postedBy",
           })
           .populate({
-            path: "applicantId",
+            path: "userId",
             select: "-password -__v",
           })
           .populate({
             path: "resumeId",
-            select: "title content skills experience education summary",
+            select:
+              "title personalInfo skills experience education projects certifications languages status template visibility",
           });
       }
 
-      const application = await query.lean().exec();
+      // ✅ Remove .lean() to keep Mongoose document methods
+      const application = await query.exec();
 
       if (!application) {
         logger.debug("Application not found", { applicationId });
+        return null;
       }
 
-      return application as IApplication | null;
+      // ✅ Convert to object and handle nested population
+      const result = application.toObject
+        ? application.toObject()
+        : application;
+
+      console.log(result);
+      return result as IApplication;
     } catch (error) {
-      // Handle specific mongoose errors
       if (error instanceof mongoose.Error.CastError) {
         logger.error("Invalid application ID format", {
           applicationId,
@@ -192,7 +201,6 @@ class ApplicationService {
       } = options;
       const skip = (page - 1) * limit;
 
-      // Build query
       const query: any = {};
 
       if (filters.status) {
@@ -203,8 +211,8 @@ class ApplicationService {
         query.jobId = filters.jobId;
       }
 
-      if (filters.applicantId) {
-        query.applicantId = filters.applicantId;
+      if (filters.userId) {
+        query.userId = filters.userId;
       }
 
       if (filters.minScore !== undefined || filters.maxScore !== undefined) {
@@ -227,15 +235,13 @@ class ApplicationService {
         }
       }
 
-      // Build sort
       const sort: any = {};
       sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
-      // Execute query
       const [applications, total] = await Promise.all([
         Application.find(query)
           .populate("jobId")
-          .populate("applicantId", "-password")
+          .populate("userId", "-password")
           .populate("resumeId")
           .sort(sort)
           .skip(skip)
@@ -267,10 +273,10 @@ class ApplicationService {
    * Get applications by applicant
    */
   async getApplicationsByApplicant(
-    applicantId: string,
+    userId: string,
     options: PaginationOptions = {},
   ): Promise<ApplicationPaginationResult> {
-    return this.getApplications({ applicantId }, options);
+    return this.getApplications({ userId }, options);
   }
 
   /**
@@ -281,6 +287,69 @@ class ApplicationService {
     options: PaginationOptions = {},
   ): Promise<ApplicationPaginationResult> {
     return this.getApplications({ jobId }, options);
+  }
+
+  /**
+   * Get applications by employer
+   */
+  async getApplicationsByEmployer(
+    employerId: string,
+    options: PaginationOptions & { jobId?: string; status?: string } = {},
+  ): Promise<ApplicationPaginationResult> {
+    try {
+      // Get all jobs for this employer
+      const jobs = await Job.find({ postedBy: employerId }).select("_id");
+      const jobIds = jobs.map((job) => job._id.toString());
+
+      if (jobIds.length === 0) {
+        return {
+          applications: [],
+          pagination: {
+            page: options.page || 1,
+            limit: options.limit || 20,
+            total: 0,
+            pages: 0,
+          },
+        };
+      }
+
+      // Build query
+      const filters: ApplicationFilters = {
+        ...(options.status && { status: options.status as ApplicationStatus }),
+        ...(options.jobId && { jobId: options.jobId }),
+      };
+
+      // Get applications
+      return this.getApplications(filters, options);
+    } catch (error) {
+      logger.error("Failed to get applications by employer", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        employerId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user already applied to a job
+   */
+  async findByJobAndCandidate(
+    jobId: string,
+    userId: string,
+  ): Promise<IApplication | null> {
+    try {
+      return await Application.findOne({
+        jobId: new Types.ObjectId(jobId),
+        userId: new Types.ObjectId(userId),
+      }).exec();
+    } catch (error) {
+      logger.error("Failed to find application by job and candidate", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        jobId,
+        userId,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -329,8 +398,25 @@ class ApplicationService {
   async updateApplicationStatus(
     applicationId: string,
     status: ApplicationStatus,
+    notes?: string,
+    userId?: string,
   ): Promise<IApplication | null> {
-    return this.updateApplication(applicationId, { status });
+    const updateData: UpdateApplicationData = { status };
+
+    // Add status history entry
+    if (notes || userId) {
+      const historyEntry = {
+        status,
+        notes: notes || "",
+        changedBy: userId ? new Types.ObjectId(userId) : undefined,
+        timestamp: new Date(),
+      };
+
+      // We need to handle this in the model - for now just update status
+      // The model will handle status history automatically
+    }
+
+    return this.updateApplication(applicationId, updateData);
   }
 
   /**
@@ -380,6 +466,7 @@ class ApplicationService {
       throw error;
     }
   }
+
   /**
    * Get application statistics
    */
@@ -393,8 +480,8 @@ class ApplicationService {
         query.jobId = filters.jobId;
       }
 
-      if (filters.applicantId) {
-        query.applicantId = filters.applicantId;
+      if (filters.userId) {
+        query.userId = filters.userId;
       }
 
       if (filters.fromDate || filters.toDate) {
@@ -484,7 +571,7 @@ class ApplicationService {
         jobId,
         aiScore: { $exists: true, $ne: null },
       })
-        .populate("applicantId", "-password")
+        .populate("userId", "-password")
         .populate("resumeId")
         .sort({ aiScore: -1 })
         .limit(limit)
@@ -507,8 +594,8 @@ class ApplicationService {
   async hasUserApplied(jobId: string, userId: string): Promise<boolean> {
     try {
       const application = await Application.findOne({
-        jobId,
-        applicantId: userId,
+        jobId: new Types.ObjectId(jobId),
+        userId: new Types.ObjectId(userId),
       });
       return !!application;
     } catch (error) {
@@ -537,6 +624,7 @@ class ApplicationService {
   async bulkUpdateStatus(
     applicationIds: string[],
     status: ApplicationStatus,
+    notes?: string,
   ): Promise<{ updated: number; failed: string[] }> {
     try {
       const failed: string[] = [];
@@ -544,7 +632,7 @@ class ApplicationService {
 
       for (const id of applicationIds) {
         try {
-          const result = await this.updateApplicationStatus(id, status);
+          const result = await this.updateApplicationStatus(id, status, notes);
           if (result) {
             updated++;
           } else {
@@ -573,10 +661,14 @@ class ApplicationService {
 
   // ============ Private Helper Methods ============
 
+  /**
+   * ✅ Fixed Status Transition Validation
+   */
   private validateStatusTransition(
     currentStatus: ApplicationStatus,
     newStatus: ApplicationStatus,
   ): void {
+    // ✅ Define valid transitions
     const validTransitions: Record<ApplicationStatus, ApplicationStatus[]> = {
       [ApplicationStatus.PENDING]: [
         ApplicationStatus.REVIEWING,
@@ -599,9 +691,10 @@ class ApplicationService {
     };
 
     const allowed = validTransitions[currentStatus] || [];
+
     if (!allowed.includes(newStatus)) {
       throw new Error(
-        `Invalid status transition from ${currentStatus} to ${newStatus}`,
+        `Invalid status transition from ${currentStatus} to ${newStatus}. Allowed transitions: ${allowed.join(", ") || "none"}`,
       );
     }
   }

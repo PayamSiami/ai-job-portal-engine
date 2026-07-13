@@ -3,19 +3,9 @@ import express, { Request, Response, Router } from "express";
 import userService from "../services/userService.js";
 import { protect, authorize } from "../middleware/authMiddleware.js";
 import { UserRole } from "../models/User.models.js";
+import { getStringParam, getUserId } from "../utils/routeHelpers.js";
 
 const router: Router = express.Router();
-
-// ============ Helper Functions ============
-
-// ✅ Helper for params (string | string[])
-const getStringParam = (param: string | string[] | undefined): string => {
-  if (!param) return "";
-  if (Array.isArray(param)) {
-    return param[0] || "";
-  }
-  return param;
-};
 
 // ✅ Helper for query parameters
 const getStringQueryParam = (value: any): string | undefined => {
@@ -42,13 +32,6 @@ const getBooleanQueryParam = (value: any): boolean | undefined => {
   const str = getStringQueryParam(value);
   if (str === undefined) return undefined;
   return str === "true" || str === "1";
-};
-
-// ✅ Helper to get user ID from request
-const getUserId = (req: Request): string | null => {
-  const user = (req as any).user;
-  if (!user) return null;
-  return user.id?.toString() || null;
 };
 
 // ============ Public Routes ============
@@ -344,7 +327,7 @@ router.get(
   authorize(UserRole.ADMIN),
   async (req: Request, res: Response): Promise<void> => {
     try {
-      // ✅ Use getStringParam for params
+      // getStringParam for params
       const id = getStringParam(req.params.id);
 
       if (!id) {

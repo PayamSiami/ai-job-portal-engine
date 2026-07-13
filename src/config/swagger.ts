@@ -349,7 +349,7 @@ const swaggerOptions: swaggerJsdoc.Options = {
           properties: {
             id: { type: "string" },
             jobId: { type: "string" },
-            applicantId: { type: "string" },
+            userId: { type: "string" },
             resumeId: { type: "string" },
             coverLetter: { type: "string" },
             expectedSalary: { type: "number" },

@@ -7,6 +7,7 @@ import {
 } from "../middleware/validationMiddleware.js";
 import authService from "../services/authService.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { getUserId } from "../utils/routeHelpers.js";
 
 const router: Router = express.Router();
 
@@ -169,12 +170,6 @@ router.post(
     }
   },
 );
-
-const getUserId = (req: Request): string | null => {
-  const user = (req as any).user;
-  if (!user) return null;
-  return user.id?.toString() || null;
-};
 
 router.get(
   "/me",
