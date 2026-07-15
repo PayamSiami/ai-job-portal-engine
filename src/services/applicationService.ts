@@ -8,6 +8,7 @@ import Resume from "../models/Resume.models.js";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger.js";
 import User from "../models/User.models.js";
+import { AppError } from "../utils/errorHandler.js";
 
 // ============ Type Definitions ============
 
@@ -369,11 +370,6 @@ class ApplicationService {
         throw new Error("Application not found");
       }
 
-      // Check if status update is allowed
-      if (data.status) {
-        this.validateStatusTransition(application.status, data.status);
-      }
-
       // Update fields
       Object.assign(application, data);
       application.updatedAt = new Date();
@@ -393,7 +389,7 @@ class ApplicationService {
   }
 
   /**
-   * Update application status
+   * Update application status with history tracking
    */
   async updateApplicationStatus(
     applicationId: string,
@@ -401,22 +397,125 @@ class ApplicationService {
     notes?: string,
     userId?: string,
   ): Promise<IApplication | null> {
-    const updateData: UpdateApplicationData = { status };
-
-    // Add status history entry
-    if (notes || userId) {
-      const historyEntry = {
-        status,
-        notes: notes || "",
-        changedBy: userId ? new Types.ObjectId(userId) : undefined,
-        timestamp: new Date(),
-      };
-
-      // We need to handle this in the model - for now just update status
-      // The model will handle status history automatically
+    // ✅ Find the application
+    const application = await Application.findById(applicationId);
+    if (!application) {
+      throw new AppError("Application not found", 404);
     }
 
-    return this.updateApplication(applicationId, updateData);
+    // ✅ Check if status transition is valid
+    this.validateStatusTransition(application.status, status);
+
+    // ✅ Create status history entry
+    const historyEntry = {
+      status: status,
+      notes: notes || "",
+      updatedAt: new Date(),
+      updatedBy: userId ? new Types.ObjectId(userId) : application.userId,
+    };
+
+    // ✅ Update application
+    const updateData: any = {
+      status: status,
+      $push: { statusHistory: historyEntry },
+    };
+
+    // ✅ Add withdrawal reason if withdrawing
+    if (status === ApplicationStatus.WITHDRAWN) {
+      updateData.withdrawnAt = new Date();
+      updateData.withdrawalReason = notes || "Candidate withdrew application";
+    }
+
+    // ✅ Add hired date if hired
+    if (status === ApplicationStatus.HIRED) {
+      updateData.hiredAt = new Date();
+    }
+
+    // ✅ Add rejected date if rejected
+    if (status === ApplicationStatus.REJECTED) {
+      updateData.rejectedAt = new Date();
+    }
+
+    // ✅ Add notes if provided
+    if (notes && status !== ApplicationStatus.WITHDRAWN) {
+      updateData.notes = notes;
+    }
+
+    // ✅ Update the application
+    const updatedApplication = await Application.findByIdAndUpdate(
+      applicationId,
+      updateData,
+      { new: true, runValidators: true },
+    );
+
+    return updatedApplication;
+  }
+
+  /**
+   * Withdraw an application (candidate cancels)
+   */
+  async withdrawApplication(
+    applicationId: string,
+    userId: string,
+    reason?: string,
+  ): Promise<IApplication | null> {
+    const application = await Application.findById(applicationId);
+
+    if (!application) {
+      throw new AppError("Application not found", 404);
+    }
+
+    // ✅ Verify ownership
+    if (application.userId.toString() !== userId) {
+      throw new AppError("You can only withdraw your own applications", 403);
+    }
+
+    // ✅ Check if already withdrawn or rejected
+    if (application.status === ApplicationStatus.WITHDRAWN) {
+      throw new AppError("Application already withdrawn", 400);
+    }
+
+    if (application.status === ApplicationStatus.HIRED) {
+      throw new AppError("Cannot withdraw a hired application", 400);
+    }
+
+    if (application.status === ApplicationStatus.REJECTED) {
+      throw new AppError("Cannot withdraw a rejected application", 400);
+    }
+
+    // ✅ Update application
+    application.status = ApplicationStatus.WITHDRAWN;
+    application.withdrawalReason = reason || "Candidate withdrew application";
+    application.withdrawnAt = new Date();
+
+    // ✅ Add to status history
+    application.statusHistory.push({
+      status: ApplicationStatus.WITHDRAWN,
+      notes: reason || "Candidate withdrew application",
+      updatedAt: new Date(),
+      updatedBy: new mongoose.Types.ObjectId(userId),
+    });
+
+    await application.save();
+    return application;
+  }
+
+  /**
+   * Check if a candidate can withdraw
+   */
+  async canWithdraw(applicationId: string, userId: string): Promise<boolean> {
+    const application = await Application.findById(applicationId);
+
+    if (!application) return false;
+    if (application.userId.toString() !== userId) return false;
+
+    const nonWithdrawableStatuses = [
+      ApplicationStatus.HIRED,
+      ApplicationStatus.REJECTED,
+      ApplicationStatus.WITHDRAWN,
+    ];
+
+    return !nonWithdrawableStatuses.includes(application.status);
   }
 
   /**
@@ -462,98 +561,6 @@ class ApplicationService {
       logger.error("Failed to delete application", {
         error: error instanceof Error ? error.message : "Unknown error",
         applicationId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Get application statistics
-   */
-  async getApplicationStatistics(
-    filters: ApplicationFilters = {},
-  ): Promise<ApplicationStatistics> {
-    try {
-      const query: any = {};
-
-      if (filters.jobId) {
-        query.jobId = filters.jobId;
-      }
-
-      if (filters.userId) {
-        query.userId = filters.userId;
-      }
-
-      if (filters.fromDate || filters.toDate) {
-        query.appliedAt = {};
-        if (filters.fromDate) {
-          query.appliedAt.$gte = filters.fromDate;
-        }
-        if (filters.toDate) {
-          query.appliedAt.$lte = filters.toDate;
-        }
-      }
-
-      // Get statistics
-      const [total, byStatusAgg, scoreStats, recentCount] = await Promise.all([
-        Application.countDocuments(query),
-        Application.aggregate([
-          { $match: query },
-          {
-            $group: {
-              _id: "$status",
-              count: { $sum: 1 },
-            },
-          },
-        ]),
-        Application.aggregate([
-          { $match: { ...query, aiScore: { $exists: true, $ne: null } } },
-          {
-            $group: {
-              _id: null,
-              average: { $avg: "$aiScore" },
-              max: { $max: "$aiScore" },
-              min: { $min: "$aiScore" },
-            },
-          },
-        ]),
-        Application.countDocuments({
-          ...query,
-          appliedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        }),
-      ]);
-
-      // ✅ Initialize byStatus with all enum values
-      const byStatus: Record<ApplicationStatus, number> = {
-        [ApplicationStatus.PENDING]: 0,
-        [ApplicationStatus.REVIEWING]: 0,
-        [ApplicationStatus.SHORTLISTED]: 0,
-        [ApplicationStatus.INTERVIEWING]: 0,
-        [ApplicationStatus.HIRED]: 0,
-        [ApplicationStatus.REJECTED]: 0,
-      };
-
-      // ✅ Type-safe iteration
-      byStatusAgg.forEach((item: any) => {
-        const status = item._id as ApplicationStatus;
-        // ✅ Check if the status is a valid ApplicationStatus
-        if (Object.values(ApplicationStatus).includes(status)) {
-          byStatus[status] = item.count;
-        }
-      });
-
-      return {
-        total,
-        byStatus,
-        averageScore: scoreStats[0]?.average || 0,
-        highestScore: scoreStats[0]?.max || 0,
-        lowestScore: scoreStats[0]?.min || 0,
-        recentApplications: recentCount,
-      };
-    } catch (error) {
-      logger.error("Failed to get application statistics", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        filters,
       });
       throw error;
     }
@@ -662,7 +669,7 @@ class ApplicationService {
   // ============ Private Helper Methods ============
 
   /**
-   * ✅ Fixed Status Transition Validation
+   * Validate status transition
    */
   private validateStatusTransition(
     currentStatus: ApplicationStatus,
@@ -673,29 +680,51 @@ class ApplicationService {
       [ApplicationStatus.PENDING]: [
         ApplicationStatus.REVIEWING,
         ApplicationStatus.REJECTED,
+        ApplicationStatus.WITHDRAWN,
       ],
       [ApplicationStatus.REVIEWING]: [
         ApplicationStatus.SHORTLISTED,
         ApplicationStatus.REJECTED,
+        ApplicationStatus.WITHDRAWN,
       ],
       [ApplicationStatus.SHORTLISTED]: [
         ApplicationStatus.INTERVIEWING,
         ApplicationStatus.REJECTED,
+        ApplicationStatus.WITHDRAWN,
       ],
       [ApplicationStatus.INTERVIEWING]: [
         ApplicationStatus.HIRED,
         ApplicationStatus.REJECTED,
+        ApplicationStatus.WITHDRAWN,
       ],
-      [ApplicationStatus.HIRED]: [],
-      [ApplicationStatus.REJECTED]: [],
+      [ApplicationStatus.HIRED]: [], // Terminal state - no transitions
+      [ApplicationStatus.REJECTED]: [], // Terminal state - no transitions
+      [ApplicationStatus.WITHDRAWN]: [], // Terminal state - no transitions
     };
 
-    const allowed = validTransitions[currentStatus] || [];
-
-    if (!allowed.includes(newStatus)) {
-      throw new Error(
-        `Invalid status transition from ${currentStatus} to ${newStatus}. Allowed transitions: ${allowed.join(", ") || "none"}`,
+    // ✅ Check if transition is valid
+    const allowedTransitions = validTransitions[currentStatus] || [];
+    if (
+      !allowedTransitions.includes(newStatus) &&
+      currentStatus !== newStatus
+    ) {
+      throw new AppError(
+        `Invalid status transition from ${currentStatus} to ${newStatus}`,
+        400,
       );
+    }
+
+    // ✅ Prevent re-applying after withdrawal
+    if (currentStatus === ApplicationStatus.WITHDRAWN) {
+      throw new AppError("Cannot update a withdrawn application", 400);
+    }
+
+    // ✅ Prevent updating terminal states
+    if (
+      currentStatus === ApplicationStatus.HIRED ||
+      currentStatus === ApplicationStatus.REJECTED
+    ) {
+      throw new AppError("Cannot update a terminated application", 400);
     }
   }
 }

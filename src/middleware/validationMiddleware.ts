@@ -16,7 +16,7 @@ export const validateRegistration = [
     .withMessage("Password must be at least 6 characters"),
 
   body("role")
-    .isIn(["admin", "job_seeker", "employer"])
+    .isIn(["admin", "job-seeker", "employer"])
     .withMessage("Invalid role"),
 
   (req: Request, res: Response, next: NextFunction): void => {

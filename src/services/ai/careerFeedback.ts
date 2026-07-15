@@ -6,6 +6,7 @@ import {
 } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
+import hashString from "../../utils/hashString.js";
 
 // ============ Type Definitions ============
 
@@ -171,8 +172,20 @@ class CareerFeedbackService {
 
     let lastError: Error | null = null;
 
+    // ✅ Test Groq connection first
+    // const isConnected = await testGroqConnection();
+    // if (!isConnected) {
+    //   console.warn("⚠️ Groq connection failed, using fallback");
+    //   return this.getFallbackResult("Groq connection failed");
+    // }
+
+    // ✅ Try Groq with retries
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       try {
+        console.log(
+          `🤖 Attempt ${attempt + 1}: Generating feedback with Groq...`,
+        );
+
         const prompt = this.buildFeedbackPrompt(
           truncatedResume,
           industry,
@@ -180,119 +193,47 @@ class CareerFeedbackService {
           includeDetailed,
         );
 
-        const result = await this.model.generateContent(prompt);
-        const cleanedText = this.cleanAIResponse(result.response.text());
-        const parsed = this.parseFeedbackResult(cleanedText, includeDetailed);
+        // const result = await generateWithGroq(prompt);
 
-        // Add metadata
-        const metadata: CareerFeedbackResult["metadata"] = {
-          processingTime: Date.now() - startTime,
-          modelUsed: config.GEMINI_MODEL,
-          timestamp: new Date().toISOString(),
-          fromCache: false,
-        };
+        // if (result.success && result.content) {
+        //   const cleanedText = this.cleanAIResponse(result.content);
+        //   const parsed = this.parseFeedbackResult(cleanedText, includeDetailed);
 
-        const finalResult = {
-          ...parsed,
-          metadata,
-        };
+        //   const finalResult: CareerFeedbackResult = {
+        //     ...parsed,
+        //     metadata: {
+        //       processingTime: Date.now() - startTime,
+        //       modelUsed: "groq",
+        //       timestamp: new Date().toISOString(),
+        //       fromCache: false,
+        //     },
+        //   };
 
-        // Store in cache
-        if (useCache) {
-          this.cache.set(cacheKey, finalResult);
-        }
+        //   // Store in cache
+        //   if (useCache) {
+        //     this.cache.set(cacheKey, finalResult);
+        //   }
 
-        return finalResult;
-      } catch (error) {
+        //   console.log(`✅ Successfully generated feedback with Groq`);
+        //   return finalResult;
+        // } else {
+        //   throw new Error(result.error || "Groq returned empty response");
+        // }
+      } catch (error:any) {
         lastError = error as Error;
-        console.error(`Feedback attempt ${attempt + 1} failed:`, error);
+        console.error(`Groq attempt ${attempt + 1} failed:`, error.message);
 
         if (attempt < retryCount) {
-          await this.delay(Math.pow(2, attempt) * 1000);
+          const delayMs = Math.pow(2, attempt) * 1000;
+          console.log(`⏳ Retrying in ${delayMs}ms...`);
+          await this.delay(delayMs);
         }
       }
     }
 
-    console.error("All feedback attempts failed:", lastError);
+    // ✅ If all attempts fail, use fallback
+    console.error("All Groq attempts failed, using fallback:", lastError);
     return this.getFallbackResult(lastError?.message);
-  }
-
-  /**
-   * Get quick career feedback summary
-   */
-  async getQuickFeedback(
-    resumeText: string,
-    industry?: string,
-  ): Promise<{
-    overallScore: number;
-    topIssues: string[];
-    topStrengths: string[];
-    recommendations: string[];
-  }> {
-    const fullFeedback = await this.generateCareerFeedback(resumeText, {
-      includeDetailed: false,
-      industry,
-    });
-
-    return {
-      overallScore: fullFeedback.overallScore,
-      topIssues: fullFeedback.issues
-        .sort((a, b) => {
-          const priority = { high: 3, medium: 2, low: 1 };
-          return priority[b.priority] - priority[a.priority];
-        })
-        .slice(0, 3)
-        .map((i) => i.description),
-      topStrengths: fullFeedback.strengths
-        .slice(0, 3)
-        .map((s) => s.description),
-      recommendations: fullFeedback.recommendations.immediate.slice(0, 3),
-    };
-  }
-
-  /**
-   * Compare two resumes and provide improvement analysis
-   */
-  async compareResumes(
-    originalResume: string,
-    improvedResume: string,
-  ): Promise<{
-    scoreImprovement: number;
-    improvements: string[];
-    remainingIssues: string[];
-    overallAssessment: string;
-  }> {
-    const prompt = `
-      Compare these two resumes and analyze the improvements:
-
-      ORIGINAL RESUME:
-      ${this.truncateText(originalResume, 3000)}
-
-      IMPROVED RESUME:
-      ${this.truncateText(improvedResume, 3000)}
-
-      Return ONLY this JSON format:
-      {
-        "scoreImprovement": number (0-100 improvement),
-        "improvements": ["list of specific improvements made"],
-        "remainingIssues": ["issues that still need to be addressed"],
-        "overallAssessment": "brief overall assessment of the improvement"
-      }
-    `;
-
-    try {
-      const result = await this.model.generateContent(prompt);
-      const cleanedText = this.cleanAIResponse(result.response.text());
-      return JSON.parse(cleanedText);
-    } catch (error) {
-      console.error("Resume comparison failed:", error);
-      return {
-        scoreImprovement: 0,
-        improvements: ["Unable to compare resumes at this time"],
-        remainingIssues: ["Please try again later"],
-        overallAssessment: "Comparison temporarily unavailable",
-      };
-    }
   }
 
   // ============ Private Helper Methods ============
@@ -570,21 +511,11 @@ class CareerFeedbackService {
     targetRole?: string,
   ): string {
     const data = {
-      resumeHash: this.hashString(resumeText.substring(0, 500)),
+      resumeHash: hashString(resumeText.substring(0, 500)),
       industry: industry || "none",
       targetRole: targetRole || "none",
     };
     return `feedback:${JSON.stringify(data)}`;
-  }
-
-  private hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return hash.toString();
   }
 
   private truncateText(text: string, maxLength: number): string {
@@ -629,21 +560,6 @@ class CareerFeedbackService {
   }
 
   // ============ Public Utility Methods ============
-
-  /**
-   * Get service status
-   */
-  getServiceStatus(): {
-    status: string;
-    model: string;
-    cacheSize: number;
-  } {
-    return {
-      status: "healthy",
-      model: config.GEMINI_MODEL,
-      cacheSize: this.cache.keys().length,
-    };
-  }
 
   /**
    * Clear cache

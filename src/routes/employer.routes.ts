@@ -97,12 +97,8 @@ router.get(
   "/candidates/shortlisted",
   employerController.getShortlistedCandidates,
 );
-router.get(
-  "/candidates/shortlisted/applications",
-  employerController.getShortlistedApplications,
-);
 router.get("/candidates/analytics", employerController.getCandidateAnalytics);
-router.get("/candidates/shortlisted/resume", employerController.getShortlistedCandidateResume);
+router.get("/candidates/shortlisted/:id/resume", employerController.getShortlistedCandidateResume);
 router.get("/candidates/export", employerController.exportCandidates);
 router.get("/candidates/:id", employerController.getCandidateById);
 router.patch(

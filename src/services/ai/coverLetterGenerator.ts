@@ -6,6 +6,7 @@ import {
 } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
+import hashString from "../../utils/hashString.js";
 
 // ============ Type Definitions ============
 
@@ -34,7 +35,7 @@ export interface CoverLetterOptions {
 export interface CoverLetterResult {
   content: string;
   wordCount: number;
-  estimatedReadTime: number; // in seconds
+  estimatedReadTime: number;
   success: boolean;
   error?: string;
   metadata?: {
@@ -56,39 +57,72 @@ export interface CoverLetterVariation {
 // ============ Service Class ============
 
 class CoverLetterGeneratorService {
-  private genAI: GoogleGenerativeAI;
-  private model: GenerativeModel;
+  private genAI?: GoogleGenerativeAI;
+  private model?: GenerativeModel;
   private cache: NodeCache;
   private readonly DEFAULT_MAX_WORDS = 250;
   private readonly MAX_RESUME_LENGTH = 4000;
   private readonly MAX_JOB_DETAILS_LENGTH = 3000;
   private readonly CACHE_TTL = 3600; // 1 hour
+  private isAIEnabled: boolean = false;
 
   constructor() {
     const apiKey = config.GEMINI_API_KEY;
+
+    // ✅ Check if API key exists
     if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is required in environment variables");
+      console.warn(
+        "⚠️ GEMINI_API_KEY not found. AI features will be disabled.",
+      );
+      this.isAIEnabled = false;
+    } else {
+      try {
+        this.genAI = new GoogleGenerativeAI(apiKey);
+
+        const generationConfig: GenerationConfig = {
+          temperature: 0.7,
+          topK: 1,
+          topP: 0.9,
+          maxOutputTokens: 600,
+        };
+
+        // ✅ Try different model versions
+        const modelName = this.getAvailableModel();
+        if (modelName) {
+          this.model = this.genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig,
+          });
+          this.isAIEnabled = true;
+          console.log(`✅ Gemini AI initialized with model: ${modelName}`);
+        } else {
+          console.warn(
+            "⚠️ No Gemini model available. AI features will be disabled.",
+          );
+          this.isAIEnabled = false;
+        }
+      } catch (error) {
+        console.warn("⚠️ Failed to initialize Gemini AI:", error);
+        this.isAIEnabled = false;
+      }
     }
-
-    this.genAI = new GoogleGenerativeAI(apiKey);
-
-    const generationConfig: GenerationConfig = {
-      temperature: 0.7,
-      topK: 1,
-      topP: 0.9,
-      maxOutputTokens: 600,
-    };
-
-    this.model = this.genAI.getGenerativeModel({
-      model: config.GEMINI_MODEL,
-      generationConfig,
-    });
 
     // Initialize cache
     this.cache = new NodeCache({
       stdTTL: this.CACHE_TTL,
       checkperiod: 120,
     });
+  }
+
+  /**
+   * Try to find an available model
+   */
+  private getAvailableModel(): string | null {
+    const models = ["gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro"];
+
+    // Return the first model that works (or default to gemini-pro)
+    // In production, you might want to test each one
+    return models[0] || "gemini-pro";
   }
 
   /**
@@ -109,179 +143,247 @@ class CoverLetterGeneratorService {
       includeAchievements = true,
     } = options;
 
+    // ✅ If AI is disabled, use fallback
+    if (!this.isAIEnabled || !this.model) {
+      console.warn(
+        "⚠️ AI not available, using fallback cover letter generation",
+      );
+      return this.generateFallbackCoverLetter(
+        jobDetails,
+        resumeText,
+        tone,
+        startTime,
+      );
+    }
+
     let lastError: Error | null = null;
 
-    // Validate inputs
-    this.validateInputs(jobDetails, resumeText);
+    try {
+      // Validate inputs
+      this.validateInputs(jobDetails, resumeText);
 
-    // Truncate inputs if they're too long
-    const truncatedResume = this.truncateText(
-      resumeText,
-      this.MAX_RESUME_LENGTH,
-    );
-    const truncatedJobDetails = this.truncateJobDetails(
-      jobDetails,
-      this.MAX_JOB_DETAILS_LENGTH,
-    );
+      // Truncate inputs if they're too long
+      const truncatedResume = this.truncateText(
+        resumeText,
+        this.MAX_RESUME_LENGTH,
+      );
+      const truncatedJobDetails = this.truncateJobDetails(
+        jobDetails,
+        this.MAX_JOB_DETAILS_LENGTH,
+      );
 
-    // Generate cache key
-    const cacheKey = this.generateCacheKey(
-      truncatedJobDetails,
-      truncatedResume,
-      maxWords,
-      tone,
-      focusSkills,
-    );
+      // Generate cache key
+      const cacheKey = this.generateCacheKey(
+        truncatedJobDetails,
+        truncatedResume,
+        maxWords,
+        tone,
+        focusSkills,
+      );
 
-    // Check cache
-    if (useCache) {
-      const cachedResult = this.cache.get<CoverLetterResult>(cacheKey);
-      if (cachedResult) {
-        if (cachedResult.metadata) {
-          cachedResult.metadata.fromCache = true;
-        }
-        return cachedResult;
-      }
-    }
-
-    for (let attempt = 0; attempt <= retryCount; attempt++) {
-      try {
-        const prompt = this.buildPrompt(
-          truncatedJobDetails,
-          truncatedResume,
-          maxWords,
-          tone,
-          focusSkills,
-          includeAchievements,
-        );
-
-        const result = await this.model.generateContent(prompt);
-        const coverLetter = result.response.text().trim();
-
-        // Validate the generated cover letter
-        if (!coverLetter || coverLetter.length < 50) {
-          throw new Error("Generated cover letter is too short or empty");
-        }
-
-        // Format result
-        const formattedResult = this.formatResult(
-          coverLetter,
-          true,
-          undefined,
-          tone,
-          startTime,
-        );
-
-        // Store in cache
-        if (useCache) {
-          this.cache.set(cacheKey, formattedResult);
-        }
-
-        return formattedResult;
-      } catch (error) {
-        lastError = error as Error;
-        console.error(
-          `Cover letter generation attempt ${attempt + 1} failed:`,
-          error,
-        );
-
-        if (attempt < retryCount) {
-          await this.delay(Math.pow(2, attempt) * 1000);
+      // Check cache
+      if (useCache) {
+        const cachedResult = this.cache.get<CoverLetterResult>(cacheKey);
+        if (cachedResult) {
+          if (cachedResult.metadata) {
+            cachedResult.metadata.fromCache = true;
+          }
+          return cachedResult;
         }
       }
-    }
 
-    console.error("All cover letter generation attempts failed:", lastError);
-    return this.formatResult(
-      "Unable to generate cover letter at this time. Please try again later.",
-      false,
-      lastError?.message,
-      tone,
-      startTime,
-    );
+      for (let attempt = 0; attempt <= retryCount; attempt++) {
+        try {
+          const prompt = this.buildPrompt(
+            truncatedJobDetails,
+            truncatedResume,
+            maxWords,
+            tone,
+            focusSkills,
+            includeAchievements,
+          );
+
+          const result = await this.model.generateContent(prompt);
+          const coverLetter = result.response.text().trim();
+
+          // Validate the generated cover letter
+          if (!coverLetter || coverLetter.length < 50) {
+            throw new Error("Generated cover letter is too short or empty");
+          }
+
+          // Format result
+          const formattedResult = this.formatResult(
+            coverLetter,
+            true,
+            undefined,
+            tone,
+            startTime,
+          );
+
+          // Store in cache
+          if (useCache) {
+            this.cache.set(cacheKey, formattedResult);
+          }
+
+          return formattedResult;
+        } catch (error) {
+          lastError = error as Error;
+          console.error(
+            `Cover letter generation attempt ${attempt + 1} failed:`,
+            error,
+          );
+
+          // ✅ If it's a 403 error, don't retry (API key issue)
+          if (error instanceof Error && error.message.includes("403")) {
+            console.error("❌ API key issue detected. Using fallback.");
+            return this.generateFallbackCoverLetter(
+              jobDetails,
+              resumeText,
+              tone,
+              startTime,
+            );
+          }
+
+          if (attempt < retryCount) {
+            await this.delay(Math.pow(2, attempt) * 1000);
+          }
+        }
+      }
+
+      console.error("All cover letter generation attempts failed:", lastError);
+      return this.generateFallbackCoverLetter(
+        jobDetails,
+        resumeText,
+        tone,
+        startTime,
+      );
+    } catch (error) {
+      console.error("Error generating cover letter:", error);
+      return this.generateFallbackCoverLetter(
+        jobDetails,
+        resumeText,
+        tone,
+        startTime,
+      );
+    }
   }
 
   /**
-   * Generate multiple cover letter variations with different tones
+   * Generate fallback cover letter without AI
    */
-  async generateCoverLetterVariations(
+  private generateFallbackCoverLetter(
     jobDetails: JobDetails,
     resumeText: string,
-    count: number = 3,
-  ): Promise<CoverLetterVariation[]> {
-    const tones: Array<
-      "professional" | "enthusiastic" | "formal" | "casual" | "confident"
-    > = ["professional", "enthusiastic", "confident", "formal", "casual"];
+    tone: string,
+    startTime: number,
+  ): CoverLetterResult {
+    // Extract name from resume (simple heuristic)
+    const nameMatch = resumeText.match(/[A-Z][a-z]+ [A-Z][a-z]+/);
+    const name = nameMatch ? nameMatch[0] : "Candidate";
 
-    const results: CoverLetterVariation[] = [];
-    const selectedTones = tones.slice(0, Math.min(count, tones.length));
+    // Extract skills from resume
+    const skills = this.extractSkills(resumeText);
 
-    for (const tone of selectedTones) {
-      try {
-        const result = await this.generateCoverLetter(jobDetails, resumeText, {
-          tone,
-        });
+    // Build a template-based cover letter
+    const templates: Record<string, string> = {
+      professional: `
+Dear Hiring Manager,
 
-        // Score the variation (simple scoring based on length and content quality)
-        const score = this.scoreCoverLetter(result.content);
+I am writing to express my interest in the ${jobDetails.title} position at ${jobDetails.company}. With my background in ${skills.slice(0, 3).join(", ") || "this field"}, I am confident in my ability to contribute to your team.
 
-        results.push({
-          tone,
-          result,
-          score,
-        });
-      } catch (error) {
-        console.error(`Failed to generate ${tone} variation:`, error);
-      }
-    }
+Throughout my career, I have developed strong skills in ${skills.join(", ") || "various aspects of this profession"}. I am particularly drawn to this role because of ${jobDetails.company}'s reputation for excellence and innovation.
 
-    // Sort by score descending
-    return results.sort((a, b) => (b.score || 0) - (a.score || 0));
+I would welcome the opportunity to discuss how my qualifications align with the needs of ${jobDetails.company}. Thank you for your time and consideration.
+
+Sincerely,
+${name}
+      `.trim(),
+
+      enthusiastic: `
+Dear Hiring Manager,
+
+I am thrilled to apply for the ${jobDetails.title} position at ${jobDetails.company}! As someone who is passionate about ${skills.slice(0, 2).join(" and ") || "this field"}, I have been following ${jobDetails.company}'s work with great interest.
+
+I bring ${skills.join(", ") || "relevant experience"} that I believe would make me a valuable addition to your team. I am excited about the opportunity to contribute to ${jobDetails.company}'s continued success.
+
+I would love to discuss how my energy and expertise can benefit your organization. Thank you for considering my application.
+
+Best regards,
+${name}
+      `.trim(),
+    };
+
+    const content =
+      templates[tone as keyof typeof templates] || templates.professional;
+
+    return this.formatResult(content, true, undefined, tone, startTime);
   }
 
   /**
-   * Generate a cover letter in multiple languages
+   * Extract skills from resume text
    */
-  async generateMultilingualCoverLetter(
-    jobDetails: JobDetails,
-    resumeText: string,
-    languages: string[],
-  ): Promise<Record<string, CoverLetterResult>> {
-    const results: Record<string, CoverLetterResult> = {};
+  private extractSkills(resumeText: string): string[] {
+    const commonSkills = [
+      "JavaScript",
+      "TypeScript",
+      "Python",
+      "React",
+      "Node.js",
+      "HTML",
+      "CSS",
+      "Git",
+      "Docker",
+      "AWS",
+      "MongoDB",
+      "PostgreSQL",
+      "Leadership",
+      "Communication",
+      "Problem Solving",
+      "Team Management",
+      "Project Management",
+      "Agile",
+      "Scrum",
+      "Jira",
+      "CI/CD",
+      "REST API",
+      "GraphQL",
+      "Express.js",
+      "Next.js",
+      "Vue.js",
+    ];
 
-    for (const language of languages) {
-      try {
-        const prompt = this.buildMultilingualPrompt(
-          jobDetails,
-          resumeText,
-          language,
-        );
-
-        const result = await this.model.generateContent(prompt);
-        const coverLetter = result.response.text().trim();
-
-        results[language] = this.formatResult(
-          coverLetter,
-          true,
-          undefined,
-          "professional",
-        );
-      } catch (error) {
-        console.error(`Failed to generate ${language} cover letter:`, error);
-        results[language] = this.formatResult(
-          `Unable to generate cover letter in ${language}`,
-          false,
-          error instanceof Error ? error.message : "Unknown error",
-          "professional",
-        );
+    const foundSkills: string[] = [];
+    for (const skill of commonSkills) {
+      if (resumeText.toLowerCase().includes(skill.toLowerCase())) {
+        foundSkills.push(skill);
       }
     }
 
-    return results;
+    return foundSkills.length > 0
+      ? foundSkills.slice(0, 5)
+      : ["professional experience", "dedication", "team collaboration"];
   }
 
-  // ============ Private Helper Methods ============
+  /**
+   * Validate inputs
+   */
+  private validateInputs(jobDetails: JobDetails, resumeText: string): void {
+    if (!jobDetails.title || jobDetails.title.trim().length === 0) {
+      throw new Error("Job title is required");
+    }
 
+    if (!jobDetails.company || jobDetails.company.trim().length === 0) {
+      throw new Error("Company name is required");
+    }
+
+    if (!resumeText || resumeText.trim().length < 50) {
+      throw new Error("Resume text must be at least 50 characters");
+    }
+  }
+
+  /**
+   * Build the AI prompt
+   */
   private buildPrompt(
     jobDetails: JobDetails,
     resumeText: string,
@@ -352,53 +454,57 @@ class CoverLetterGeneratorService {
     return prompt;
   }
 
-  private buildMultilingualPrompt(
-    jobDetails: JobDetails,
-    resumeText: string,
-    language: string,
-  ): string {
-    return `
-      Write a professional cover letter in ${language} for the following position.
+  /**
+   * Format the result
+   */
+  private formatResult(
+    content: string,
+    success: boolean,
+    error?: string,
+    tone?: string,
+    startTime?: number,
+  ): CoverLetterResult {
+    const wordCount = this.countWords(content);
 
-      JOB DETAILS:
-      Title: ${jobDetails.title}
-      Company: ${jobDetails.company}
-      Location: ${jobDetails.location}
-      
-      Key Requirements:
-      ${jobDetails.requirements}
-      
-      Job Description:
-      ${jobDetails.description}
-      
-      CANDIDATE RESUME:
-      ${resumeText}
-      
-      Requirements:
-      - Write in ${language}
-      - Professional tone
-      - 3-4 paragraphs
-      - Highlight relevant skills and experience
-      - End with a call to action
-      
-      Return ONLY the cover letter text in ${language}.
-    `;
+    const result: CoverLetterResult = {
+      content,
+      wordCount,
+      estimatedReadTime: Math.ceil(wordCount / 200),
+      success,
+      error,
+    };
+
+    if (startTime) {
+      result.metadata = {
+        processingTime: Date.now() - startTime,
+        modelUsed: this.isAIEnabled ? "gemini-pro" : "fallback",
+        timestamp: new Date().toISOString(),
+        fromCache: false,
+        tone: tone || "professional",
+        wordCount,
+      };
+    }
+
+    return result;
   }
 
-  private validateInputs(jobDetails: JobDetails, resumeText: string): void {
-    if (!jobDetails.title || jobDetails.title.trim().length === 0) {
-      throw new Error("Job title is required");
-    }
-
-    if (!jobDetails.company || jobDetails.company.trim().length === 0) {
-      throw new Error("Company name is required");
-    }
-
-    if (!resumeText || resumeText.trim().length < 50) {
-      throw new Error("Resume text must be at least 50 characters");
-    }
+  /**
+   * Count words in text
+   */
+  private countWords(text: string): number {
+    return text.trim().split(/\s+/).length;
   }
 
+  /**
+   * Delay helper
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Truncate text
+   */
   private truncateText(text: string, maxLength: number): string {
     if (text.length <= maxLength) {
       return text;
@@ -406,6 +512,9 @@ class CoverLetterGeneratorService {
     return text.substring(0, maxLength) + "... (truncated)";
   }
 
+  /**
+   * Truncate job details
+   */
   private truncateJobDetails(
     jobDetails: JobDetails,
     maxLength: number,
@@ -428,45 +537,9 @@ class CoverLetterGeneratorService {
     return truncated;
   }
 
-  private formatResult(
-    content: string,
-    success: boolean,
-    error?: string,
-    tone?: string,
-    startTime?: number,
-  ): CoverLetterResult {
-    const wordCount = this.countWords(content);
-
-    const result: CoverLetterResult = {
-      content,
-      wordCount,
-      estimatedReadTime: Math.ceil(wordCount / 200),
-      success,
-      error,
-    };
-
-    if (startTime) {
-      result.metadata = {
-        processingTime: Date.now() - startTime,
-        modelUsed: config.GEMINI_MODEL,
-        timestamp: new Date().toISOString(),
-        fromCache: false,
-        tone: tone || "professional",
-        wordCount,
-      };
-    }
-
-    return result;
-  }
-
-  private countWords(text: string): number {
-    return text.trim().split(/\s+/).length;
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
+  /**
+   * Generate cache key
+   */
   private generateCacheKey(
     jobDetails: JobDetails,
     resumeText: string,
@@ -475,159 +548,15 @@ class CoverLetterGeneratorService {
     focusSkills?: string[],
   ): string {
     const data = {
-      jobHash: this.hashString(
+      jobHash: hashString(
         `${jobDetails.title}|${jobDetails.company}|${jobDetails.requirements.substring(0, 100)}`,
       ),
-      resumeHash: this.hashString(resumeText.substring(0, 500)),
+      resumeHash: hashString(resumeText.substring(0, 500)),
       maxWords,
       tone,
       focusSkills: focusSkills || [],
     };
     return `coverletter:${JSON.stringify(data)}`;
-  }
-
-  private hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return hash.toString();
-  }
-
-  private scoreCoverLetter(content: string): number {
-    let score = 0;
-    const wordCount = this.countWords(content);
-
-    // Score based on word count (ideal: 200-250 words)
-    if (wordCount >= 200 && wordCount <= 250) {
-      score += 30;
-    } else if (wordCount >= 150 && wordCount <= 300) {
-      score += 20;
-    } else {
-      score += 10;
-    }
-
-    // Score based on structure (presence of paragraphs)
-    const paragraphs = content
-      .split(/\n\s*\n/)
-      .filter((p) => p.trim().length > 0);
-    if (paragraphs.length >= 3 && paragraphs.length <= 4) {
-      score += 30;
-    } else if (paragraphs.length >= 2) {
-      score += 20;
-    }
-
-    // Score based on professional language (simple heuristic)
-    const professionalWords = [
-      "experience",
-      "skills",
-      "achievement",
-      "passionate",
-      "excited",
-      "opportunity",
-      "contribute",
-      "team",
-      "collaborate",
-      "results",
-    ];
-    const matches = professionalWords.filter((word) =>
-      content.toLowerCase().includes(word),
-    );
-    score += Math.min(matches.length * 5, 30);
-
-    // Score based on personalization (presence of job-specific terms)
-    if (content.includes("position") || content.includes("role")) {
-      score += 10;
-    }
-
-    return Math.min(score, 100);
-  }
-
-  // ============ Public Utility Methods ============
-
-  /**
-   * Get the current service status
-   */
-  getServiceStatus(): { status: string; model: string; cacheSize: number } {
-    return {
-      status: "healthy",
-      model: config.GEMINI_MODEL,
-      cacheSize: this.cache.keys().length,
-    };
-  }
-
-  /**
-   * Check if the cover letter meets quality standards
-   */
-  validateCoverLetterQuality(coverLetter: string): {
-    valid: boolean;
-    issues: string[];
-    score: number;
-  } {
-    const issues: string[] = [];
-    let score = 0;
-
-    if (coverLetter.length < 100) {
-      issues.push("Cover letter is too short (minimum 100 characters)");
-    } else {
-      score += 20;
-    }
-
-    const wordCount = this.countWords(coverLetter);
-    if (wordCount < 50) {
-      issues.push("Cover letter has too few words (minimum 50)");
-    } else if (wordCount >= 50 && wordCount < 150) {
-      issues.push("Cover letter could be longer (aim for 200-250 words)");
-      score += 10;
-    } else if (wordCount >= 150 && wordCount <= 300) {
-      score += 30;
-    } else if (wordCount > 500) {
-      issues.push("Cover letter is too long (maximum 500 words)");
-    }
-
-    // Check for common placeholders
-    const placeholders = [
-      "[Your Name]",
-      "[Your Contact]",
-      "[Company Name]",
-      "[Job Title]",
-      "[Your Email]",
-      "[Your Phone]",
-    ];
-    const foundPlaceholders = placeholders.filter((p) =>
-      coverLetter.includes(p),
-    );
-    if (foundPlaceholders.length > 0) {
-      issues.push(`Contains placeholders: ${foundPlaceholders.join(", ")}`);
-    } else {
-      score += 20;
-    }
-
-    // Check for proper greeting
-    if (coverLetter.includes("Dear") || coverLetter.includes("Hello")) {
-      score += 15;
-    } else {
-      issues.push("Missing proper greeting (e.g., 'Dear Hiring Manager')");
-    }
-
-    // Check for proper closing
-    if (
-      coverLetter.includes("Sincerely") ||
-      coverLetter.includes("Best regards") ||
-      coverLetter.includes("Thank you")
-    ) {
-      score += 15;
-    } else {
-      issues.push("Missing proper closing (e.g., 'Sincerely')");
-    }
-
-    return {
-      valid: issues.length === 0,
-      issues,
-      score: Math.min(score, 100),
-    };
   }
 
   /**

@@ -1,97 +1,18 @@
 import express, { Request, Response, Router } from "express";
 import resumeService from "../services/resumeService.js";
-import resumeAnalyzerService from "../services/ai/resumeAnalyzer.js";
+import resumeAnalyzerService from "../services/ai/resumeAnalyzer.service.js";
+import careerFeedbackService from "../services/ai/careerFeedback.js";
 import coverLetterGeneratorService from "../services/ai/coverLetterGenerator.js";
-import jobMatchRecommenderService from "../services/ai/jobMatchRecommender.js";
+import jobMatchRecommenderService from "../services/ai/jobMatchRecommender.service..js";
 import jobService from "../services/jobService.js";
 import pdfService from "../services/pdfService.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { authorize, protect } from "../middleware/authMiddleware.js";
 import { getStringParam, getUserId } from "../utils/routeHelpers.js";
 import logger from "../utils/logger.js";
+import { buildResumeContent } from "../utils/buildResumeContent.js";
+import { AppError } from "../utils/errorHandler.js";
 
 const router: Router = express.Router();
-
-/**
- * Build text content from structured resume data for AI features
- */
-function buildResumeContent(resume: any): string {
-  const parts: string[] = [];
-
-  // Personal Info
-  const { personalInfo } = resume;
-  if (personalInfo) {
-    parts.push(
-      `Name: ${personalInfo.firstName || ""} ${personalInfo.lastName || ""}`,
-    );
-    parts.push(`Email: ${personalInfo.email || ""}`);
-    parts.push(`Phone: ${personalInfo.phone || ""}`);
-    parts.push(`Location: ${personalInfo.location || ""}`);
-    parts.push(`Title: ${personalInfo.title || ""}`);
-    if (personalInfo.summary) {
-      parts.push(`Summary: ${personalInfo.summary}`);
-    }
-  }
-
-  // Experience
-  if (resume.experience && resume.experience.length > 0) {
-    parts.push("\nExperience:");
-    resume.experience.forEach((exp: any) => {
-      parts.push(`- ${exp.position} at ${exp.company}`);
-      if (exp.description) parts.push(`  ${exp.description}`);
-      if (exp.achievements && exp.achievements.length > 0) {
-        exp.achievements.forEach((ach: string) => parts.push(`  • ${ach}`));
-      }
-    });
-  }
-
-  // Education
-  if (resume.education && resume.education.length > 0) {
-    parts.push("\nEducation:");
-    resume.education.forEach((edu: any) => {
-      parts.push(`- ${edu.degree} from ${edu.institution}`);
-      if (edu.fieldOfStudy) parts.push(`  ${edu.fieldOfStudy}`);
-      if (edu.gpa) parts.push(`  GPA: ${edu.gpa}`);
-    });
-  }
-
-  // Skills
-  if (resume.skills && resume.skills.length > 0) {
-    parts.push("\nSkills:");
-    resume.skills.forEach((skill: any) => {
-      parts.push(`- ${skill.name} (${skill.level || "intermediate"})`);
-    });
-  }
-
-  // Certifications
-  if (resume.certifications && resume.certifications.length > 0) {
-    parts.push("\nCertifications:");
-    resume.certifications.forEach((cert: any) => {
-      parts.push(`- ${cert.name} - ${cert.issuer}`);
-    });
-  }
-
-  // Languages
-  if (resume.languages && resume.languages.length > 0) {
-    parts.push("\nLanguages:");
-    resume.languages.forEach((lang: any) => {
-      parts.push(`- ${lang.name} (${lang.proficiency || "professional"})`);
-    });
-  }
-
-  // Projects
-  if (resume.projects && resume.projects.length > 0) {
-    parts.push("\nProjects:");
-    resume.projects.forEach((project: any) => {
-      parts.push(`- ${project.name}`);
-      if (project.description) parts.push(`  ${project.description}`);
-      if (project.technologies && project.technologies.length > 0) {
-        parts.push(`  Technologies: ${project.technologies.join(", ")}`);
-      }
-    });
-  }
-
-  return parts.join("\n");
-}
 
 // ============================================
 // Resume CRUD Operations
@@ -615,6 +536,7 @@ router.get(
 // ============================================
 // AI Features
 // ============================================
+
 /**
  * @swagger
  * /api/resumes/{id}/analyze:
@@ -637,69 +559,86 @@ router.get(
  *       401:
  *         description: Unauthorized
  */
+// In your resume routes
 router.get(
   "/:id/analyze",
   protect,
   async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = getUserId(req);
+    const userId = getUserId(req);
+    const resumeId = getStringParam(req.params.id);
+    const jobId = (req.query.jobId as string) || req.body.jobId;
 
-      if (!userId) {
-        res.status(401).json({ error: "User not authenticated" });
-        return;
-      }
-
-      const resumeId = getStringParam(req.params.id);
-      if (!resumeId) {
-        res.status(400).json({ error: "Invalid resume ID" });
-        return;
-      }
-
-      const resume = await resumeService.getResume(resumeId, userId);
-
-      if (!resume) {
-        res.status(404).json({ error: "Resume not found" });
-        return;
-      }
-
-      // Build content from structured resume data
-      const content = buildResumeContent(resume);
-
-      // Get a sample job to analyze against
-      const sampleJob = await jobService.getSampleJob();
-
-      if (!sampleJob) {
-        res.status(404).json({ error: "No jobs available for analysis" });
-        return;
-      }
-
-      const analysis = await resumeAnalyzerService.analyzeResumeVsJob(
-        content,
-        sampleJob.requirements || "",
-        sampleJob.description || "",
-      );
-
-      res.json({
-        success: true,
-        data: {
-          resume: {
-            id: resume._id,
-            title: resume.title,
-          },
-          job: {
-            id: sampleJob._id,
-            title: sampleJob.title,
-            company: sampleJob.company,
-          },
-          analysis,
-        },
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Analysis failed";
-      logger.error("Analysis error:", { error: errorMessage });
-      res.status(500).json({ error: errorMessage });
+    // ✅ Validate inputs
+    if (!resumeId) {
+      throw new AppError("Invalid resume ID", 400);
     }
+
+    if (!jobId) {
+      throw new AppError("Job ID is required", 400);
+    }
+
+    // ✅ Get resume with ownership validation
+    const resume = await resumeService.getResume(resumeId, String(userId));
+    if (!resume) {
+      throw new AppError("Resume not found", 404);
+    }
+
+    // ✅ Get the job
+    const job = await jobService.getJobById(jobId);
+    if (!job) {
+      throw new AppError("Job not found", 404);
+    }
+
+    // ✅ Build resume content
+    const content = buildResumeContent(resume);
+
+    logger.info("Resume content built for analysis", {
+      resumeId: resume._id,
+      jobId: job._id,
+      contentLength: content.length,
+      skillCount: resume.skills?.length || 0,
+    });
+
+    // ✅ Validate content length
+    if (!content || content.trim().length < 50) {
+      throw new AppError(
+        "Resume content is too short. Please add more details. Minimum 50 characters required.",
+        400,
+      );
+    }
+
+    // ✅ Build requirements from job
+    const requirements = job.requirements || job.description || "";
+
+    // ✅ Perform analysis
+    const analysis = await resumeAnalyzerService.analyzeResumeVsJob(
+      content,
+      requirements,
+      job.description || "",
+      {
+        targetRole: job.title,
+        retryCount: 3,
+        useCache: true,
+      },
+    );
+
+    // ✅ Return response
+    res.status(200).json({
+      success: true,
+      data: {
+        resume: {
+          id: resume._id,
+          title: resume.title,
+          skills: resume.skills?.map((s: any) => s.name) || [],
+        },
+        job: {
+          id: job._id,
+          title: job.title,
+          company: job.company,
+        },
+        analysis,
+      },
+    });
   },
 );
 
@@ -738,6 +677,7 @@ router.get(
  */
 router.post(
   "/:id/generate-cover-letter",
+  authorize("job-seeker"),
   protect,
   async (req: Request, res: Response): Promise<void> => {
     try {
@@ -848,7 +788,7 @@ router.get(
       const content = buildResumeContent(resume);
 
       const feedback =
-        await resumeAnalyzerService.generateCareerFeedback(content);
+        await careerFeedbackService.generateCareerFeedback(content);
 
       res.json({
         success: true,

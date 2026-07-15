@@ -206,46 +206,8 @@ class JobService {
     return job;
   }
 
-  async updateJob(id: string, jobData: any): Promise<IJob | null> {
-    if (!id) {
-      throw new Error("Job ID is required");
-    }
-    return Job.findByIdAndUpdate(id, jobData, { new: true }).exec();
-  }
-
-  async deleteJob(id: string): Promise<IJob | null> {
-    if (!id) {
-      throw new Error("Job ID is required");
-    }
-    return Job.findByIdAndUpdate(id, { isActive: false }, { new: true }).exec();
-  }
-
-  async getSampleJob(): Promise<IJob | null> {
-    return Job.findOne({ isActive: true }).sort({ createdAt: -1 }).exec();
-  }
-
   async getActiveJobs(): Promise<IJob[]> {
     return Job.find({ isActive: true }).sort({ createdAt: -1 }).exec();
-  }
-
-  async searchJobsByTitle(searchTerm: string): Promise<IJob[]> {
-    if (!searchTerm) {
-      throw new Error("Search term is required");
-    }
-    return Job.find({
-      isActive: true,
-      title: { $regex: searchTerm, $options: "i" },
-    }).exec();
-  }
-
-  async getJobsByTag(tag: string): Promise<IJob[]> {
-    if (!tag) {
-      throw new Error("Tag is required");
-    }
-    return Job.find({
-      isActive: true,
-      tags: { $in: [tag] },
-    }).exec();
   }
 
   /**
@@ -517,26 +479,6 @@ class JobService {
       benefits: randomItem(benefitsList),
       tags: tags,
     };
-  }
-
-  async getJobStatistics(): Promise<any> {
-    const stats = await Job.aggregate([
-      { $match: { isActive: true } },
-      {
-        $group: {
-          _id: null,
-          totalJobs: { $sum: 1 },
-          averageSalary: { $avg: "$salary" },
-          minSalary: { $min: "$minSalary" },
-          maxSalary: { $max: "$maxSalary" },
-          byType: { $addToSet: "$jobType" },
-          byMode: { $addToSet: "$workMode" },
-          byLevel: { $addToSet: "$experienceLevel" },
-        },
-      },
-    ]);
-
-    return stats[0] || { totalJobs: 0 };
   }
 
   /**

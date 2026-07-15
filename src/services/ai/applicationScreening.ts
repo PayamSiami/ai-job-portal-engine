@@ -5,6 +5,7 @@ import {
 } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
+import hashString from "../../utils/hashString.js";
 
 export interface ApplicationData {
   expectedSalary?: number;
@@ -239,91 +240,6 @@ class ApplicationScreeningService {
     console.error("All screening attempts failed:", lastError);
     return this.getFallbackResult(lastError?.message);
   }
-  /**
-   * Screen multiple applications in batch
-   */
-  async screenMultipleApplications(
-    applications: Array<{
-      resumeText: string;
-      applicationData: ApplicationData;
-    }>,
-    jobDetails: JobDetails,
-    options: ScreeningOptions = {},
-  ): Promise<ScreeningResult[]> {
-    const results: ScreeningResult[] = [];
-
-    for (const app of applications) {
-      try {
-        const result = await this.screenApplication(
-          app.resumeText,
-          app.applicationData,
-          jobDetails,
-          options,
-        );
-        results.push(result);
-      } catch (error) {
-        console.error("Failed to screen application:", error);
-        results.push(this.getFallbackResult("Batch screening failed"));
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * Validate if application meets minimum requirements
-   */
-  async validateApplication(
-    resumeText: string,
-    applicationData: ApplicationData,
-    jobDetails: JobDetails,
-  ): Promise<ValidationResult> {
-    const issues: string[] = [];
-
-    // Check resume
-    if (!resumeText || resumeText.trim().length < 100) {
-      issues.push("Resume is too short or missing");
-    }
-
-    // Check application data
-    if (
-      !applicationData.expectedSalary ||
-      applicationData.expectedSalary <= 0
-    ) {
-      issues.push("Expected salary is missing or invalid");
-    }
-
-    if (!applicationData.availableFrom) {
-      issues.push("Availability date is not specified");
-    }
-
-    // Check salary alignment
-    if (jobDetails.minSalary && applicationData.expectedSalary) {
-      if (applicationData.expectedSalary < jobDetails.minSalary) {
-        issues.push("Expected salary is below the minimum range");
-      }
-      if (
-        jobDetails.maxSalary &&
-        applicationData.expectedSalary > jobDetails.maxSalary
-      ) {
-        issues.push("Expected salary exceeds the maximum range");
-      }
-    }
-
-    // Check for minimum requirements in resume
-    const hasRelevantKeywords = this.checkRelevantKeywords(
-      resumeText,
-      jobDetails.requirements,
-    );
-    if (!hasRelevantKeywords) {
-      issues.push("Resume may not match key job requirements");
-    }
-
-    return {
-      valid: issues.length === 0,
-      issues,
-    };
-  }
 
   // ============ Cache Helper Methods ============
 
@@ -338,7 +254,7 @@ class ApplicationScreeningService {
     includeBreakdown: boolean,
   ): string {
     const data = {
-      resumeHash: this.hashString(resumeText.substring(0, 500)),
+      resumeHash: hashString(resumeText.substring(0, 500)),
       applicationData: {
         expectedSalary: applicationData.expectedSalary,
         availableFrom: applicationData.availableFrom,
@@ -355,19 +271,6 @@ class ApplicationScreeningService {
       includeBreakdown,
     };
     return `screening:${JSON.stringify(data)}`;
-  }
-
-  /**
-   * Simple hash function for cache keys
-   */
-  private hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return hash.toString();
   }
 
   /**
@@ -577,24 +480,6 @@ class ApplicationScreeningService {
     }
   }
 
-  private checkRelevantKeywords(
-    resumeText: string,
-    requirements: string,
-  ): boolean {
-    const keywords = requirements
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((word) => word.length > 3)
-      .slice(0, 20);
-
-    const resumeLower = resumeText.toLowerCase();
-    const matchedKeywords = keywords.filter((keyword) =>
-      resumeLower.includes(keyword),
-    );
-
-    return matchedKeywords.length >= keywords.length * 0.3;
-  }
-
   private truncateText(text: string, maxLength: number): string {
     if (text.length <= maxLength) {
       return text;
@@ -644,70 +529,6 @@ class ApplicationScreeningService {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  // ============ Public Utility Methods ============
-
-  /**
-   * Get service status
-   */
-  getServiceStatus(): {
-    status: string;
-    model: string;
-    weights: ScreeningWeights;
-    cacheSize: number;
-  } {
-    return {
-      status: "healthy",
-      model: config.GEMINI_MODEL,
-      weights: this.DEFAULT_WEIGHTS,
-      cacheSize: this.cache.keys().length,
-    };
-  }
-
-  /**
-   * Get screening statistics for a batch
-   */
-  getBatchStatistics(results: ScreeningResult[]): {
-    averageScore: number;
-    recommendations: Record<string, number>;
-    scores: number[];
-    highestScore: number;
-    lowestScore: number;
-    cachedCount: number;
-  } {
-    if (results.length === 0) {
-      return {
-        averageScore: 0,
-        recommendations: {},
-        scores: [],
-        highestScore: 0,
-        lowestScore: 0,
-        cachedCount: 0,
-      };
-    }
-
-    const scores = results.map((r) => r.score);
-    const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-
-    const recommendations: Record<string, number> = {};
-    let cachedCount = 0;
-    results.forEach((r) => {
-      recommendations[r.recommendation] =
-        (recommendations[r.recommendation] || 0) + 1;
-      if (r.metadata?.fromCache) {
-        cachedCount++;
-      }
-    });
-
-    return {
-      averageScore,
-      recommendations,
-      scores,
-      highestScore: Math.max(...scores),
-      lowestScore: Math.min(...scores),
-      cachedCount,
-    };
   }
 }
 

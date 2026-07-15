@@ -7,7 +7,9 @@
     "start": "node src/app.ts",
     "dev": "nodemon --exec tsx src/app.ts",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix"
   },
   "keywords": [],
   "author": "",
@@ -32,7 +34,6 @@
     "jsonwebtoken": "^9.0.3",
     "kafka-node": "^5.0.0",
     "mongoose": "^9.7.3",
-    "morg": "^0.1.0",
     "multer": "^2.2.0",
     "node-cache": "^5.1.2",
     "pdfkit": "^0.19.1",
@@ -44,6 +45,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/json2csv": "^5.0.7",
@@ -53,14 +55,15 @@
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/winston": "^2.4.4",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
     "jest": "^30.4.2",
     "morgan": "^1.11.0",
     "nodemon": "^3.1.14",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "ts-node": {
     "esm": true,

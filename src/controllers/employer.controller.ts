@@ -146,36 +146,50 @@ export class EmployerController {
   });
 
   /**
-   * Get shortlisted candidates
+   * GET /api/employer/candidates/shortlisted
+   * Get shortlisted candidates with optional detailed view
    */
   getShortlistedCandidates = catchAsync(async (req: Request, res: Response) => {
-    try {
-      const employerId = (req as any).user?.id;
+    const employerId = (req as any).user?.id;
 
-      const {
-        page = 1,
-        limit = 10,
-        search = "",
-        jobId,
-        sortBy = "updatedAt",
-        sortOrder = "desc",
-      } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      jobId,
+      sortBy = "updatedAt",
+      sortOrder = "desc",
+      status,
+      stage,
+      startDate,
+      endDate,
+      detailed = "false", // ✅ New param: true = detailed applications, false = candidates only
+    } = req.query;
 
-      const result = await candidateService.getShortlistedCandidates(
+    const isDetailed = detailed === "true";
+
+    // ✅ If detailed is true, fetch applications with full details
+    if (isDetailed) {
+      const result = await candidateService.getShortlistedApplications(
         employerId,
         {
           page: Number(page),
           limit: Number(limit),
           search: search as string,
           jobId: jobId as string,
+          status: status as string,
+          stage: stage as string,
           sortBy: sortBy as string,
           sortOrder: sortOrder as "asc" | "desc",
+          startDate: startDate as string,
+          endDate: endDate as string,
         },
       );
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
-        data: result.candidates,
+        type: "applications",
+        data: result.applications,
         total: result.total,
         summary: result.summary,
         pagination: {
@@ -185,75 +199,32 @@ export class EmployerController {
           totalPages: Math.ceil(result.total / Number(limit)),
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: "Failed to fetch shortlisted candidates",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
     }
+
+    // ✅ Default: fetch candidates (simpler view)
+    const result = await candidateService.getShortlistedCandidates(employerId, {
+      page: Number(page),
+      limit: Number(limit),
+      search: search as string,
+      jobId: jobId as string,
+      sortBy: sortBy as string,
+      sortOrder: sortOrder as "asc" | "desc",
+    });
+
+    res.status(200).json({
+      success: true,
+      type: "candidates",
+      data: result.candidates,
+      total: result.total,
+      summary: result.summary,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: result.total,
+        totalPages: Math.ceil(result.total / Number(limit)),
+      },
+    });
   });
-
-  /**
-   * Get shortlisted applications
-   */
-  getShortlistedApplications = catchAsync(
-    async (req: Request, res: Response) => {
-      try {
-        const employerId = (req as any).user?.id;
-
-        const {
-          page = 1,
-          limit = 10,
-          search = "",
-          jobId,
-          status,
-          stage,
-          sortBy = "updatedAt",
-          sortOrder = "desc",
-          startDate,
-          endDate,
-        } = req.query;
-
-        // ✅ Call the service
-        const result = await candidateService.getShortlistedApplications(
-          employerId,
-          {
-            page: Number(page),
-            limit: Number(limit),
-            search: search as string,
-            jobId: jobId as string,
-            status: status as string,
-            stage: stage as string,
-            sortBy: sortBy as string,
-            sortOrder: sortOrder as "asc" | "desc",
-            startDate: startDate as string,
-            endDate: endDate as string,
-          },
-        );
-
-        res.status(200).json({
-          success: true,
-          data: result.applications,
-          total: result.total,
-          summary: result.summary,
-          pagination: {
-            page: Number(page),
-            limit: Number(limit),
-            total: result.total,
-            totalPages: Math.ceil(result.total / Number(limit)),
-          },
-        });
-      } catch (error) {
-        console.error("❌ Error in getShortlistedApplications:", error);
-        res.status(500).json({
-          success: false,
-          message: "Failed to fetch shortlisted applications",
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    },
-  );
 
   getCandidateStats = catchAsync(async (req: Request, res: Response) => {
     try {

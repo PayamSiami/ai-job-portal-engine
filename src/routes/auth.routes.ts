@@ -45,8 +45,8 @@ const router: Router = express.Router();
  *                 example: "password123"
  *               role:
  *                 type: string
- *                 enum: [job_seeker, employer]
- *                 example: "job_seeker"
+ *                 enum: [job-seeker, employer]
+ *                 example: "job-seeker"
  *     responses:
  *       201:
  *         description: User registered successfully

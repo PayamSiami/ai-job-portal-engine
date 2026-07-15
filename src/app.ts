@@ -16,6 +16,8 @@ import userRoutes from "./routes/user.routes.js";
 import employerRoutes from "./routes/employer.routes.js";
 import { config } from "./config/index.js";
 import { swaggerSpec, swaggerUi } from "./config/swagger.js";
+import healthService from "./services/healthService.js";
+import logger from "./utils/logger.js";
 
 const app = express();
 
@@ -73,8 +75,8 @@ const MONGODB_URI = `mongodb://${config.DB_HOST || "localhost"}:${config.DB_PORT
 
 mongoose
   .connect(MONGODB_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.log("⚠️ MongoDB not connected:", err.message));
+  .then(() => logger.info("✅ MongoDB connected"))
+  .catch((err) => logger.error("⚠️ MongoDB not connected:", err.message));
 
 // ============ Routes ============
 app.use("/api/auth", authRoutes);
@@ -84,15 +86,52 @@ app.use("/api/resumes", resumeRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/employer", employerRoutes);
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    mongodb:
-      mongoose.connection.readyState === 1 ? "Connected" : "Disconnected",
-  });
+// Health check endpoints
+app.get("/health", async (req, res) => {
+  try {
+    const health = await healthService.checkLiveness();
+    res.json(health);
+  } catch (error) {
+    res.status(503).json({
+      status: "error",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Detailed health check
+app.get("/health/detailed", async (req, res) => {
+  try {
+    const health = await healthService.checkHealth();
+    const statusCode =
+      health.status === "healthy"
+        ? 200
+        : health.status === "degraded"
+          ? 200
+          : 503;
+    res.status(statusCode).json(health);
+  } catch (error) {
+    res.status(503).json({
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Readiness probe (for Kubernetes)
+app.get("/health/ready", async (req, res) => {
+  try {
+    const readiness = await healthService.checkReadiness();
+    const statusCode = readiness.status === "ready" ? 200 : 503;
+    res.status(statusCode).json(readiness);
+  } catch (error) {
+    res.status(503).json({
+      status: "not ready",
+      checks: {},
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 });
 
 // 404 handler

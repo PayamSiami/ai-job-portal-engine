@@ -63,8 +63,8 @@ const swaggerOptions: swaggerJsdoc.Options = {
             },
             role: {
               type: "string",
-              enum: ["job_seeker", "employer"],
-              default: "job_seeker",
+              enum: ["job-seeker", "employer"],
+              default: "job-seeker",
               description: "User role",
             },
           },
@@ -91,7 +91,7 @@ const swaggerOptions: swaggerJsdoc.Options = {
                 id: { type: "string" },
                 username: { type: "string" },
                 email: { type: "string" },
-                role: { type: "string", enum: ["job_seeker", "employer", "admin"] },
+                role: { type: "string", enum: ["job-seeker", "employer", "admin"] },
               },
             },
             token: {
@@ -122,7 +122,7 @@ const swaggerOptions: swaggerJsdoc.Options = {
             id: { type: "string" },
             username: { type: "string" },
             email: { type: "string" },
-            role: { type: "string", enum: ["job_seeker", "employer", "admin"] },
+            role: { type: "string", enum: ["job-seeker", "employer", "admin"] },
             isActive: { type: "boolean" },
             profile: {
               type: "object",
@@ -552,7 +552,7 @@ const swaggerOptions: swaggerJsdoc.Options = {
             byRole: {
               type: "object",
               properties: {
-                job_seeker: { type: "number" },
+                'job-seeker': { type: "number" },
                 employer: { type: "number" },
                 admin: { type: "number" },
               },
@@ -565,7 +565,7 @@ const swaggerOptions: swaggerJsdoc.Options = {
           required: ["userIds", "role"],
           properties: {
             userIds: { type: "array", items: { type: "string" } },
-            role: { type: "string", enum: ["job_seeker", "employer", "admin"] },
+            role: { type: "string", enum: ["job-seeker", "employer", "admin"] },
           },
         },
         BulkDeactivateRequest: {
@@ -870,7 +870,7 @@ const swaggerOptions: swaggerJsdoc.Options = {
         UserFilterQuery: {
           type: "object",
           properties: {
-            role: { type: "string", enum: ["job_seeker", "employer", "admin"] },
+            role: { type: "string", enum: ["job-seeker", "employer", "admin"] },
             isActive: { type: "boolean" },
             search: { type: "string" },
             skills: { type: "string", description: "Comma-separated skills" },

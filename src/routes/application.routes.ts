@@ -8,121 +8,10 @@ import { authorize, protect } from "../middleware/authMiddleware.js";
 import logger from "../utils/logger.js";
 import { getStringParam, getUserId } from "../utils/routeHelpers.js";
 import { ApplicationStatus } from "../models/Application.model.js";
+import { AppError } from "../utils/errorHandler.js";
+import { buildResumeContent } from "../utils/buildResumeContent.js";
 
 const router: Router = express.Router();
-
-// ==================== Helper Functions ====================
-
-/**
- * Build resume content from structured resume data for AI screening
- */
-const buildResumeContent = (resume: any): string => {
-  const parts: string[] = [];
-
-  // Personal Info
-  const { personalInfo } = resume;
-  if (personalInfo) {
-    if (personalInfo.firstName || personalInfo.lastName) {
-      parts.push(
-        `Name: ${personalInfo.firstName || ""} ${personalInfo.lastName || ""}`,
-      );
-    }
-    if (personalInfo.email) parts.push(`Email: ${personalInfo.email}`);
-    if (personalInfo.phone) parts.push(`Phone: ${personalInfo.phone}`);
-    if (personalInfo.location) parts.push(`Location: ${personalInfo.location}`);
-    if (personalInfo.title) parts.push(`Title: ${personalInfo.title}`);
-    if (personalInfo.summary) parts.push(`Summary: ${personalInfo.summary}`);
-  }
-
-  // Experience
-  if (resume.experience && resume.experience.length > 0) {
-    parts.push("\nExperience:");
-    resume.experience.forEach((exp: any) => {
-      parts.push(`- ${exp.position} at ${exp.company}`);
-      if (exp.location) parts.push(`  Location: ${exp.location}`);
-      const startDate = exp.startDate
-        ? new Date(exp.startDate).toLocaleDateString()
-        : "";
-      const endDate = exp.current
-        ? "Present"
-        : exp.endDate
-          ? new Date(exp.endDate).toLocaleDateString()
-          : "";
-      if (startDate || endDate) {
-        parts.push(`  ${startDate} - ${endDate}`);
-      }
-      if (exp.description) parts.push(`  ${exp.description}`);
-      if (exp.achievements && exp.achievements.length > 0) {
-        exp.achievements.forEach((ach: string) => parts.push(`  • ${ach}`));
-      }
-    });
-  }
-
-  // Education
-  if (resume.education && resume.education.length > 0) {
-    parts.push("\nEducation:");
-    resume.education.forEach((edu: any) => {
-      parts.push(`- ${edu.degree} from ${edu.institution}`);
-      if (edu.fieldOfStudy) parts.push(`  ${edu.fieldOfStudy}`);
-      const startDate = edu.startDate
-        ? new Date(edu.startDate).toLocaleDateString()
-        : "";
-      const endDate = edu.current
-        ? "Present"
-        : edu.endDate
-          ? new Date(edu.endDate).toLocaleDateString()
-          : "";
-      if (startDate || endDate) {
-        parts.push(`  ${startDate} - ${endDate}`);
-      }
-      if (edu.gpa) parts.push(`  GPA: ${edu.gpa}`);
-    });
-  }
-
-  // Skills
-  if (resume.skills && resume.skills.length > 0) {
-    parts.push("\nSkills:");
-    resume.skills.forEach((skill: any) => {
-      const level = skill.level ? ` (${skill.level})` : "";
-      parts.push(`- ${skill.name}${level}`);
-    });
-  }
-
-  // Certifications
-  if (resume.certifications && resume.certifications.length > 0) {
-    parts.push("\nCertifications:");
-    resume.certifications.forEach((cert: any) => {
-      parts.push(`- ${cert.name} - ${cert.issuer}`);
-      if (cert.date) {
-        parts.push(`  Date: ${new Date(cert.date).toLocaleDateString()}`);
-      }
-    });
-  }
-
-  // Languages
-  if (resume.languages && resume.languages.length > 0) {
-    parts.push("\nLanguages:");
-    resume.languages.forEach((lang: any) => {
-      parts.push(`- ${lang.name} (${lang.proficiency || "professional"})`);
-    });
-  }
-
-  // Projects
-  if (resume.projects && resume.projects.length > 0) {
-    parts.push("\nProjects:");
-    resume.projects.forEach((project: any) => {
-      parts.push(`- ${project.name}`);
-      if (project.description) parts.push(`  ${project.description}`);
-      if (project.technologies && project.technologies.length > 0) {
-        parts.push(`  Technologies: ${project.technologies.join(", ")}`);
-      }
-      if (project.url) parts.push(`  URL: ${project.url}`);
-    });
-  }
-
-  return parts.join("\n");
-};
-
 // ==================== Routes ====================
 
 /**
@@ -133,6 +22,7 @@ const buildResumeContent = (resume: any): string => {
 router.post(
   "/",
   protect,
+  authorize("job-seeker"),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = getUserId(req);
@@ -284,28 +174,33 @@ router.post(
  * Get current user's applications
  * ✅ Only authenticated job seekers can view their applications
  */
-router.get("/", protect, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const userId = getUserId(req);
+router.get(
+  "/",
+  protect,
+  authorize("job-seeker"),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = getUserId(req);
 
-    if (!userId) {
-      res.status(401).json({ error: "User not authenticated" });
-      return;
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const applications =
+        await applicationService.getApplicationsByApplicant(userId);
+
+      res.json({
+        success: true,
+        data: applications,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to fetch applications";
+      res.status(500).json({ error: errorMessage });
     }
-
-    const applications =
-      await applicationService.getApplicationsByApplicant(userId);
-
-    res.json({
-      success: true,
-      data: applications,
-    });
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Failed to fetch applications";
-    res.status(500).json({ error: errorMessage });
-  }
-});
+  },
+);
 
 /**
  * GET /api/applications/employer
@@ -460,7 +355,6 @@ router.patch(
         applicationId,
         status,
         notes,
-        userId,
       );
 
       // ✅ Trigger Kafka event for notification (handled in service)
@@ -483,10 +377,10 @@ router.patch(
  * Withdraw application (Candidate only)
  * ✅ Only job seekers can withdraw their own applications
  */
-router.patch(
+router.post(
   "/:id/withdraw",
   protect,
-  authorize("job_seeker"),
+  authorize("job-seeker"),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = getUserId(req);
@@ -502,7 +396,7 @@ router.patch(
         return;
       }
 
-      // ✅ Get application
+      // Get application
       const application =
         await applicationService.getApplicationById(applicationId);
       if (!application) {
@@ -517,12 +411,22 @@ router.patch(
         return;
       }
 
-      // ✅ Withdraw application
-      const updated = await applicationService.updateApplicationStatus(
+      const canWithdraw = await applicationService.canWithdraw(
         applicationId,
-        ApplicationStatus.REJECTED,
-        "Candidate withdrew application",
         userId,
+      );
+
+      if (!canWithdraw) {
+        throw new AppError(
+          "Cannot withdraw this application. It may be hired, rejected, or already withdrawn.",
+          400,
+        );
+      }
+
+      const updated = await applicationService.withdrawApplication(
+        applicationId,
+        userId,
+        "Candidate withdrew application",
       );
 
       res.json({

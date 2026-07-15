@@ -6,6 +6,7 @@ import {
 } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
+import hashString from "../../utils/hashString.js";
 
 // ============ Type Definitions ============
 
@@ -198,81 +199,6 @@ class JobMatchRecommenderService {
     }
   }
 
-  /**
-   * Get batch match results
-   */
-  async getBatchJobMatches(
-    resumeText: string,
-    availableJobs: Job[],
-    options: MatchOptions = {},
-  ): Promise<BatchMatchResult> {
-    const startTime = Date.now();
-    const results = await this.getJobMatches(
-      resumeText,
-      availableJobs,
-      options,
-    );
-    const stats = this.getMatchStatistics(results);
-
-    // ✅ FIX: Safely count cached results with optional chaining
-    const cachedResults = results.filter(
-      (r) => r.metadata?.fromCache === true,
-    ).length;
-
-    return {
-      results,
-      stats,
-      processingTime: Date.now() - startTime,
-      totalJobsProcessed: availableJobs.length,
-      cachedResults,
-    };
-  }
-
-  /**
-   * Get detailed match statistics for a set of job matches
-   */
-  getMatchStatistics(results: JobMatchResult[]): MatchStatistics {
-    if (results.length === 0) {
-      return {
-        totalJobsMatched: 0,
-        averageScore: 0,
-        distribution: { high: 0, medium: 0, low: 0 },
-        topMatches: [],
-        recommendations: [
-          "No matching jobs found. Try broadening your search criteria.",
-        ],
-        industryInsights: {
-          topIndustries: [],
-          inDemandSkills: [],
-          salaryRange: { min: 0, max: 0, average: 0 },
-        },
-      };
-    }
-
-    const scores = results.map((r) => r.matchScore);
-    const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-
-    const distribution = {
-      high: results.filter((r) => r.matchQuality === "high").length,
-      medium: results.filter((r) => r.matchQuality === "medium").length,
-      low: results.filter((r) => r.matchQuality === "low").length,
-    };
-
-    // Generate recommendations based on results
-    const recommendations = this.generateRecommendations(results);
-
-    // Industry insights
-    const industryInsights = this.generateIndustryInsights(results);
-
-    return {
-      totalJobsMatched: results.length,
-      averageScore,
-      distribution,
-      topMatches: results.slice(0, 3),
-      recommendations,
-      industryInsights,
-    };
-  }
 
   /**
    * Extract candidate profile from resume
@@ -288,7 +214,7 @@ class JobMatchRecommenderService {
     );
 
     // Generate cache key
-    const cacheKey = `profile:${this.hashString(truncatedResume)}`;
+    const cacheKey = `profile:${hashString(truncatedResume)}`;
 
     // Check cache
     if (useCache) {
@@ -725,7 +651,7 @@ class JobMatchRecommenderService {
       jobWorkMode: job.workMode,
       includeBreakdown,
     };
-    return `match:${this.hashString(JSON.stringify(data))}`;
+    return `match:${hashString(JSON.stringify(data))}`;
   }
 
   /**
@@ -785,112 +711,6 @@ class JobMatchRecommenderService {
   }
 
   /**
-   * Generate recommendations based on match results
-   */
-  private generateRecommendations(results: JobMatchResult[]): string[] {
-    const recommendations: string[] = [];
-
-    if (results.length === 0) {
-      recommendations.push(
-        "No matching jobs found. Consider expanding your search criteria.",
-      );
-      return recommendations;
-    }
-
-    const highMatches = results.filter((r) => r.matchQuality === "high");
-    const mediumMatches = results.filter((r) => r.matchQuality === "medium");
-
-    if (highMatches.length === 0 && mediumMatches.length > 0) {
-      recommendations.push(
-        "Consider tailoring your resume to better match the job requirements.",
-      );
-      recommendations.push(
-        "Look for jobs where you meet at least 70% of the requirements.",
-      );
-    }
-
-    if (highMatches.length > 0) {
-      recommendations.push(
-        `You have ${highMatches.length} high-quality matches. Prioritize these applications.`,
-      );
-    }
-
-    // ✅ FIX: Safely access metadata with optional chaining and nullish coalescing
-    const missingSkills = results.flatMap(
-      (r) => r.metadata?.missingSkills ?? [],
-    );
-    const uniqueMissingSkills = [...new Set(missingSkills)];
-    if (uniqueMissingSkills.length > 0) {
-      recommendations.push(
-        `Consider developing these skills: ${uniqueMissingSkills.slice(0, 3).join(", ")}`,
-      );
-    }
-
-    return recommendations;
-  }
-
-  /**
-   * Generate industry insights from results
-   */
-  private generateIndustryInsights(results: JobMatchResult[]): {
-    topIndustries: string[];
-    inDemandSkills: string[];
-    salaryRange: { min: number; max: number; average: number };
-  } {
-    // Extract industries from jobs
-    const industries = results
-      .map((r) => r.job.industry)
-      .filter((i): i is string => !!i);
-
-    const industryCount: Record<string, number> = {};
-    industries.forEach((i) => {
-      industryCount[i] = (industryCount[i] || 0) + 1;
-    });
-
-    const topIndustries = Object.entries(industryCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([industry]) => industry);
-
-    // ✅ FIX: Safely access matchedSkills with optional chaining and nullish coalescing
-    const highMatchSkills = results
-      .filter((r) => r.matchQuality === "high")
-      .flatMap((r) => r.metadata?.matchedSkills ?? []);
-
-    const skillCount: Record<string, number> = {};
-    highMatchSkills.forEach((s) => {
-      skillCount[s] = (skillCount[s] || 0) + 1;
-    });
-
-    const inDemandSkills = Object.entries(skillCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([skill]) => skill);
-
-    // Calculate salary range
-    const salaries = results
-      .map((r) => r.job)
-      .filter((j) => j.minSalary && j.maxSalary)
-      .map((j) => ({ min: j.minSalary!, max: j.maxSalary! }));
-
-    const salaryRange = {
-      min: salaries.length > 0 ? Math.min(...salaries.map((s) => s.min)) : 0,
-      max: salaries.length > 0 ? Math.max(...salaries.map((s) => s.max)) : 0,
-      average:
-        salaries.length > 0
-          ? salaries.reduce((a, s) => a + (s.min + s.max) / 2, 0) /
-            salaries.length
-          : 0,
-    };
-
-    return {
-      topIndustries,
-      inDemandSkills,
-      salaryRange,
-    };
-  }
-
-  /**
    * Clean AI response text
    */
   private cleanAIResponse(responseText: string): string {
@@ -935,19 +755,6 @@ class JobMatchRecommenderService {
   }
 
   /**
-   * Hash string for cache keys
-   */
-  private hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return hash.toString();
-  }
-
-  /**
    * Delay for retry backoff
    */
   private delay(ms: number): Promise<void> {
@@ -955,30 +762,6 @@ class JobMatchRecommenderService {
   }
 
   // ============ Public Utility Methods ============
-
-  /**
-   * Get service status
-   */
-  getServiceStatus(): {
-    status: string;
-    model: string;
-    maxJobsPerBatch: number;
-    cacheSize: number;
-  } {
-    return {
-      status: "healthy",
-      model: config.GEMINI_MODEL,
-      maxJobsPerBatch: this.MAX_JOBS_PER_BATCH,
-      cacheSize: this.cache.keys().length,
-    };
-  }
-
-  /**
-   * Get candidate profile from resume (public method)
-   */
-  async getCandidateProfile(resumeText: string): Promise<CandidateProfile> {
-    return this.extractCandidateProfile(resumeText, 2, true);
-  }
 
   /**
    * Clear cache
@@ -1004,30 +787,6 @@ class JobMatchRecommenderService {
     };
   }
 
-  /**
-   * Filter jobs by industry
-   */
-  filterJobsByIndustry(jobs: Job[], industries: string[]): Job[] {
-    if (!industries || industries.length === 0) {
-      return jobs;
-    }
-    return jobs.filter(
-      (job) => job.industry && industries.includes(job.industry),
-    );
-  }
-
-  /**
-   * Sort jobs by match score
-   */
-  sortJobsByMatch(
-    results: JobMatchResult[],
-    order: "asc" | "desc" = "desc",
-  ): JobMatchResult[] {
-    return [...results].sort((a, b) => {
-      const diff = a.matchScore - b.matchScore;
-      return order === "desc" ? -diff : diff;
-    });
-  }
 }
 
 export default new JobMatchRecommenderService();

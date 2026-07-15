@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 export enum UserRole {
   ADMIN = "admin",
-  JOB_SEEKER = "job_seeker",
+  JOB_SEEKER = "job-seeker",
   EMPLOYER = "employer",
 }
 

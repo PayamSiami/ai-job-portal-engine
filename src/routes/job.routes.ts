@@ -1,8 +1,7 @@
 import express, { Request, Response, Router } from "express";
 import jobService from "../services/jobService.js";
-import jobSearchService from "../services/ai/jobSearchService.js";
+import jobSearchService from "../services/ai/jobSearch.service.js";
 import { protect, authorize } from "../middleware/authMiddleware.js";
-import { EmployerController } from "../controllers/employer.controller.js";
 
 const router: Router = express.Router();
 
