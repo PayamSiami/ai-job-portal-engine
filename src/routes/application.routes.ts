@@ -277,7 +277,7 @@ router.get(
 
       // ✅ Check access: applicant or employer who posted the job
       const app = application as any;
-      const isApplicant = app.userId?.toString() === userId;
+      const isApplicant = app.userId?._id?.toString() === userId;
       const isEmployer = app.jobId?.postedBy?.toString() === userId;
 
       if (!isApplicant && !isEmployer) {
@@ -377,7 +377,7 @@ router.patch(
  * Withdraw application (Candidate only)
  * ✅ Only job seekers can withdraw their own applications
  */
-router.post(
+router.patch(
   "/:id/withdraw",
   protect,
   authorize("job-seeker"),
@@ -406,7 +406,7 @@ router.post(
 
       // ✅ Verify ownership
       const app = application as any;
-      if (app.userId?.toString() !== userId) {
+      if (app.userId?._id?.toString() !== userId) {
         res.status(403).json({ error: "Access denied" });
         return;
       }

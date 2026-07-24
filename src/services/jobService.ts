@@ -144,7 +144,6 @@ class JobService {
     };
   }
 
-  // In jobService.ts
   async getJobsWithMongoQuery(
     mongoQuery: any,
     options: JobPaginationOptions = {},

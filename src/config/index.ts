@@ -15,6 +15,8 @@ class Config {
   public GEMINI_TEMPERATURE: number;
   public GEMINI_TOP_K: number;
   public GEMINI_TOP_P: number;
+  public GROQ_MODEL: string;
+  public GROQ_API_KEY: string;
 
   constructor() {
     this.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
@@ -31,6 +33,8 @@ class Config {
     );
     this.GEMINI_TOP_K = parseInt(process.env.GEMINI_TOP_K || "1", 10);
     this.GEMINI_TOP_P = parseFloat(process.env.GEMINI_TOP_P || "0.8");
+    this.GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+    this.GROQ_MODEL = process.env.GROQ_MODEL || "";
   }
 }
 

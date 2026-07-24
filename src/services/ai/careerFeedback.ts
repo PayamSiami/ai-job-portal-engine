@@ -7,6 +7,7 @@ import {
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
 import hashString from "../../utils/hashString.js";
+import { generateWithGroq, testGroqConnection } from "./groq.service.js";
 
 // ============ Type Definitions ============
 
@@ -173,11 +174,11 @@ class CareerFeedbackService {
     let lastError: Error | null = null;
 
     // ✅ Test Groq connection first
-    // const isConnected = await testGroqConnection();
-    // if (!isConnected) {
-    //   console.warn("⚠️ Groq connection failed, using fallback");
-    //   return this.getFallbackResult("Groq connection failed");
-    // }
+    const isConnected = await testGroqConnection();
+    if (!isConnected) {
+      console.warn("⚠️ Groq connection failed, using fallback");
+      return this.getFallbackResult("Groq connection failed");
+    }
 
     // ✅ Try Groq with retries
     for (let attempt = 0; attempt <= retryCount; attempt++) {
@@ -193,33 +194,33 @@ class CareerFeedbackService {
           includeDetailed,
         );
 
-        // const result = await generateWithGroq(prompt);
+        const result = await generateWithGroq(prompt);
 
-        // if (result.success && result.content) {
-        //   const cleanedText = this.cleanAIResponse(result.content);
-        //   const parsed = this.parseFeedbackResult(cleanedText, includeDetailed);
+        if (result.success && result.content) {
+          const cleanedText = this.cleanAIResponse(result.content);
+          const parsed = this.parseFeedbackResult(cleanedText, includeDetailed);
 
-        //   const finalResult: CareerFeedbackResult = {
-        //     ...parsed,
-        //     metadata: {
-        //       processingTime: Date.now() - startTime,
-        //       modelUsed: "groq",
-        //       timestamp: new Date().toISOString(),
-        //       fromCache: false,
-        //     },
-        //   };
+          const finalResult: CareerFeedbackResult = {
+            ...parsed,
+            metadata: {
+              processingTime: Date.now() - startTime,
+              modelUsed: "groq",
+              timestamp: new Date().toISOString(),
+              fromCache: false,
+            },
+          };
 
-        //   // Store in cache
-        //   if (useCache) {
-        //     this.cache.set(cacheKey, finalResult);
-        //   }
+          // Store in cache
+          if (useCache) {
+            this.cache.set(cacheKey, finalResult);
+          }
 
-        //   console.log(`✅ Successfully generated feedback with Groq`);
-        //   return finalResult;
-        // } else {
-        //   throw new Error(result.error || "Groq returned empty response");
-        // }
-      } catch (error:any) {
+          console.log(`✅ Successfully generated feedback with Groq`);
+          return finalResult;
+        } else {
+          throw new Error(result.error || "Groq returned empty response");
+        }
+      } catch (error: any) {
         lastError = error as Error;
         console.error(`Groq attempt ${attempt + 1} failed:`, error.message);
 
@@ -362,30 +363,40 @@ class CareerFeedbackService {
     return prompt;
   }
 
-  private cleanAIResponse(responseText: string): string {
-    return responseText
-      .replace(/```json\s*/g, "")
-      .replace(/```\s*/g, "")
-      .replace(/^[^{]*/, "")
-      .replace(/[^}]*$/, "")
-      .trim();
-  }
+  // backend/src/services/ai/careerFeedback.ts
 
+  /**
+   * Parse and validate feedback result with better error handling
+   */
   private parseFeedbackResult(
-    cleanedText: string,
+    text: string,
     includeDetailed: boolean,
-  ): CareerFeedbackResult {
+  ): Omit<CareerFeedbackResult, "metadata"> {
     try {
-      const parsed = JSON.parse(cleanedText);
+      // ✅ Try to extract JSON from the response
+      let jsonStr = text.trim();
 
-      // Validate required fields
-      if (typeof parsed.overallScore !== "number") {
-        throw new Error("Invalid overall score in response");
+      // Remove markdown code blocks
+      jsonStr = jsonStr.replace(/```json\s*/g, "");
+      jsonStr = jsonStr.replace(/```\s*/g, "");
+
+      // Find JSON object in the text (in case there's extra text)
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("No JSON object found in response");
       }
 
-      const result: CareerFeedbackResult = {
+      // Parse the JSON
+      let parsed = JSON.parse(jsonMatch[0]);
+
+      // If it's nested, dig deeper
+      if (parsed.feedback) {
+        parsed = parsed.feedback;
+      }
+
+      // ✅ Ensure all required fields exist with defaults
+      const result: Omit<CareerFeedbackResult, "metadata"> = {
         issues: Array.isArray(parsed.issues) ? parsed.issues : [],
-        strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
         improvements: Array.isArray(parsed.improvements)
           ? parsed.improvements
           : [],
@@ -395,114 +406,171 @@ class CareerFeedbackService {
         targetRoles: Array.isArray(parsed.targetRoles)
           ? parsed.targetRoles
           : [],
-        overallScore: Math.min(100, Math.max(0, parsed.overallScore)),
-        recommendations: parsed.recommendations || {
-          immediate: [],
-          shortTerm: [],
-          longTerm: [],
-        },
+        overallScore:
+          typeof parsed.overallScore === "number"
+            ? Math.min(100, Math.max(0, parsed.overallScore))
+            : 0,
+        // ✅ Always include strengths and recommendations with defaults
+        strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
+        recommendations: Array.isArray(parsed.recommendations)
+          ? parsed.recommendations
+          : [],
       };
 
-      // Add detailed analysis if available
+      // ✅ Include detailed analysis if available and requested
       if (includeDetailed && parsed.detailedAnalysis) {
-        result.detailedAnalysis = {
-          skillsAssessment: {
-            technical: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.skillsAssessment?.technical || 0,
-              ),
-            ),
-            soft: Math.min(
-              100,
-              Math.max(0, parsed.detailedAnalysis.skillsAssessment?.soft || 0),
-            ),
-            leadership: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.skillsAssessment?.leadership || 0,
-              ),
-            ),
-          },
-          experienceAssessment: {
-            relevance: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.experienceAssessment?.relevance || 0,
-              ),
-            ),
-            depth: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.experienceAssessment?.depth || 0,
-              ),
-            ),
-            progression: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.experienceAssessment?.progression || 0,
-              ),
-            ),
-          },
-          educationAssessment: {
-            relevance: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.educationAssessment?.relevance || 0,
-              ),
-            ),
-            level: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.educationAssessment?.level || 0,
-              ),
-            ),
-            quality: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.educationAssessment?.quality || 0,
-              ),
-            ),
-          },
-          presentationAssessment: {
-            clarity: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.presentationAssessment?.clarity || 0,
-              ),
-            ),
-            impact: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.presentationAssessment?.impact || 0,
-              ),
-            ),
-            formatting: Math.min(
-              100,
-              Math.max(
-                0,
-                parsed.detailedAnalysis.presentationAssessment?.formatting || 0,
-              ),
-            ),
-          },
-        };
+        (result as any).detailedAnalysis = parsed.detailedAnalysis;
       }
 
       return result;
     } catch (error) {
       console.error("Failed to parse feedback result:", error);
-      throw new Error("Invalid response format from AI");
+      console.error("Raw text:", text.substring(0, 500) + "...");
+
+      // ✅ Try to extract data using regex as fallback
+      return this.extractFeedbackFromText(text);
     }
+  }
+
+  /**
+   * Fallback: Extract feedback from unstructured text
+   */
+  private extractFeedbackFromText(
+    text: string,
+  ): Omit<CareerFeedbackResult, "metadata"> {
+    const result: Omit<CareerFeedbackResult, "metadata"> = {
+      issues: [],
+      improvements: [],
+      missingSkills: [],
+      targetRoles: [],
+      overallScore: 50,
+    };
+
+    // Try to find score
+    const scoreMatch = text.match(/(?:score|overallScore|rating)[:\s]*(\d+)/i);
+    if (scoreMatch) {
+      result.overallScore = Math.min(100, Math.max(0, parseInt(scoreMatch[1])));
+    }
+
+    // Try to extract issues
+    const issueMatches = text.match(
+      /(?:issue|problem|concern)[:\s]*([^.\n]+)/gi,
+    );
+    if (issueMatches) {
+      result.issues = issueMatches.slice(0, 5).map((item, index) => ({
+        type: "content",
+        description: item
+          .replace(/^(?:issue|problem|concern)[:\s]*/i, "")
+          .trim(),
+        location: "General",
+        priority: index < 2 ? "high" : "medium",
+        suggestion: "Review and improve this area",
+      }));
+    }
+
+    // Try to extract improvements
+    const improvementMatches = text.match(
+      /(?:improvement|suggestion|recommend)[:\s]*([^.\n]+)/gi,
+    );
+    if (improvementMatches) {
+      result.improvements = improvementMatches
+        .slice(0, 5)
+        .map((item) =>
+          item
+            .replace(/^(?:improvement|suggestion|recommend)[:\s]*/i, "")
+            .trim(),
+        );
+    }
+
+    // If no data extracted, create default feedback
+    if (result.issues.length === 0 && result.improvements.length === 0) {
+      return this.getDefaultFeedbackResult();
+    }
+
+    return result;
+  }
+
+  /**
+   * Get default feedback result when all parsing fails
+   */
+  private getDefaultFeedbackResult(): Omit<CareerFeedbackResult, "metadata"> {
+    return {
+      issues: [
+        {
+          type: "content",
+          description:
+            "Your resume could benefit from more specific achievements and quantifiable results.",
+          location: "General",
+          priority: "high",
+          suggestion: "Add numbers and metrics to your achievements.",
+        },
+        {
+          type: "content",
+          description:
+            "Consider adding more relevant keywords from job descriptions.",
+          location: "Skills Section",
+          priority: "medium",
+          suggestion: "Review job descriptions and include matching keywords.",
+        },
+        {
+          type: "formatting",
+          description: "Ensure consistent formatting throughout your resume.",
+          location: "General",
+          priority: "low",
+          suggestion: "Use consistent fonts, bullet points, and spacing.",
+        },
+      ],
+      improvements: [
+        'Add quantifiable achievements (e.g., "Increased sales by 30%")',
+        "Tailor your resume to each job application",
+        "Include relevant keywords from job descriptions",
+        "Keep your resume to 1-2 pages",
+        "Use action verbs to describe your experience",
+      ],
+      missingSkills: [
+        "Consider adding more technical skills relevant to your field",
+        "Highlight leadership and management experience",
+        "Include any relevant certifications",
+      ],
+      targetRoles: [
+        "Career advancement in your current field",
+        "Skills development for next role",
+      ],
+      overallScore: 65,
+      strengths: [
+        {
+          type: "experience",
+          description: "Professional experience in your field",
+          impact: "high",
+        },
+        {
+          type: "skills",
+          description: "Relevant technical and soft skills",
+          impact: "medium",
+        },
+      ],
+      recommendations: {
+        immediate: [
+          "Add quantifiable achievements with numbers",
+          "Include keywords from job descriptions",
+          "Ensure consistent formatting",
+        ],
+        shortTerm: [
+          "Get additional certifications",
+          "Update your LinkedIn profile",
+        ],
+        longTerm: ["Develop leadership skills", "Build a portfolio of work"],
+      },
+    };
+  }
+
+  private cleanAIResponse(responseText: string): string {
+    return responseText
+      .replace(/```json\s*/g, "")
+      .replace(/```\s*/g, "")
+      .replace(/^[^{]*/, "")
+      .replace(/[^}]*$/, "")
+      .trim();
   }
 
   private generateCacheKey(
