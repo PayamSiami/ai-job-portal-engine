@@ -40,7 +40,7 @@ export interface UpdateCompanyDto extends Partial<CreateCompanyDto> {
   isVerified?: boolean;
 }
 
-export class CompanyService {
+class CompanyService {
   /**
    * Create a new company
    */
@@ -76,14 +76,6 @@ export class CompanyService {
     });
 
     await company.save();
-
-    // Update user with companyId
-    await User.findByIdAndUpdate(userId, {
-      $set: {
-        companyId: company._id,
-        role: "employer",
-      },
-    });
 
     return company;
   }
@@ -276,7 +268,7 @@ export class CompanyService {
 
     // Optionally, also soft delete all jobs associated with this company
     await Job.updateMany(
-      { companyId: company._id },
+      { company: company._id },
       {
         isDeleted: true,
         deletedAt: new Date(),
@@ -311,7 +303,7 @@ export class CompanyService {
 
     // Query jobs using companyId
     const query: any = {
-      companyId: company._id,
+      company: company._id,
       isDeleted: false,
     };
 
@@ -329,7 +321,7 @@ export class CompanyService {
         .skip(skip)
         .limit(limit)
         .populate("postedBy", "name email")
-        .populate("companyId", "name logo industry"),
+        .populate("company", "name logo industry"),
       Job.countDocuments(query),
     ]);
 
@@ -355,7 +347,7 @@ export class CompanyService {
 
     // Use companyId instead of postedBy for company-level stats
     const jobs = await Job.find({
-      companyId: company._id,
+      company: company._id,
       isDeleted: false,
     });
 
@@ -392,11 +384,11 @@ export class CompanyService {
       ] as any),
       this.getTopSkills(jobIdStrings),
       Job.countDocuments({
-        companyId: company._id,
+        company: company._id,
         isDeleted: false,
       }),
       Job.countDocuments({
-        companyId: company._id,
+        company: company._id,
         isActive: true,
         isDeleted: false,
       }),
@@ -452,3 +444,5 @@ export class CompanyService {
       .slice(0, 10);
   }
 }
+
+export default new CompanyService;

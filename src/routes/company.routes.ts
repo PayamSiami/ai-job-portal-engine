@@ -1,4 +1,3 @@
-// backend/src/routes/company.routes.ts
 import express from "express";
 import multer from "multer";
 
@@ -47,5 +46,6 @@ router.post(
   upload.single("logo"),
   companyController.uploadLogo,
 );
+router.delete("/company", protect, companyController.deleteCompany);
 
 export default router;

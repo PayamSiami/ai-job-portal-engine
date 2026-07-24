@@ -1,38 +1,19 @@
 // src/routes/users.routes.ts
 import express, { Request, Response, Router } from "express";
-import userService from "../services/userService.js";
+import userService from "../services/user.service.js";
 import { protect, authorize } from "../middleware/authMiddleware.js";
 import { UserRole } from "../models/User.models.js";
-import { getStringParam, getUserId } from "../utils/routeHelpers.js";
+import {
+  getNumberQueryParam,
+  getStringParam,
+  getUserId,
+} from "../utils/routeHelpers.js";
+import {
+  getBooleanQueryParam,
+  getStringQueryParam,
+} from "../utils/getQueryParam.js";
 
 const router: Router = express.Router();
-
-// ✅ Helper for query parameters
-const getStringQueryParam = (value: any): string | undefined => {
-  if (!value) return undefined;
-  if (Array.isArray(value)) {
-    return value[0]?.toString();
-  }
-  if (typeof value === "object" && value !== null) {
-    return value.toString();
-  }
-  return value.toString();
-};
-
-// ✅ Helper for number query parameters
-const getNumberQueryParam = (value: any, defaultValue: number): number => {
-  const str = getStringQueryParam(value);
-  if (!str) return defaultValue;
-  const num = parseInt(str, 10);
-  return isNaN(num) ? defaultValue : num;
-};
-
-// ✅ Helper for boolean query parameters
-const getBooleanQueryParam = (value: any): boolean | undefined => {
-  const str = getStringQueryParam(value);
-  if (str === undefined) return undefined;
-  return str === "true" || str === "1";
-};
 
 // ============ Public Routes ============
 
@@ -281,12 +262,23 @@ router.get(
   authorize(UserRole.ADMIN),
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const page = getNumberQueryParam(req.query.page, 1);
-      const limit = getNumberQueryParam(req.query.limit, 10);
-      const role = getStringQueryParam(req.query.role) as UserRole | undefined;
-      const isActive = getBooleanQueryParam(req.query.isActive);
-      const search = getStringQueryParam(req.query.search);
-      const skillsParam = getStringQueryParam(req.query.skills);
+      const page = getNumberQueryParam(req.query.page as string | undefined, 1);
+      const limit = getNumberQueryParam(
+        req.query.limit as string | undefined,
+        10,
+      );
+      const role = getStringQueryParam(req.query.role as string | undefined) as
+        | UserRole
+        | undefined;
+      const isActive = getBooleanQueryParam(
+        req.query.isActive as string | undefined,
+      );
+      const search = getStringQueryParam(
+        req.query.search as string | undefined,
+      );
+      const skillsParam = getStringQueryParam(
+        req.query.skills as string | undefined,
+      );
       const sortBy = getStringQueryParam(req.query.sortBy) || "createdAt";
       const sortOrder =
         (getStringQueryParam(req.query.sortOrder) as "asc" | "desc") || "desc";
@@ -664,8 +656,11 @@ router.get(
         return;
       }
 
-      const page = getNumberQueryParam(req.query.page, 1);
-      const limit = getNumberQueryParam(req.query.limit, 10);
+      const page = getNumberQueryParam(req.query.page as string | undefined, 1);
+      const limit = getNumberQueryParam(
+        req.query.limit as string | undefined,
+        10,
+      );
 
       const result = await userService.getUsersByRole(role as UserRole, {
         page,
@@ -691,8 +686,11 @@ router.get(
   authorize(UserRole.ADMIN),
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const page = getNumberQueryParam(req.query.page, 1);
-      const limit = getNumberQueryParam(req.query.limit, 10);
+      const page = getNumberQueryParam(req.query.page as string | undefined, 1);
+      const limit = getNumberQueryParam(
+        req.query.limit as string | undefined,
+        10,
+      );
 
       const result = await userService.getActiveUsers({
         page,

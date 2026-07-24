@@ -5,30 +5,26 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
-import ExpressMongoSanitize from "express-mongo-sanitize";
-
-// Import routes
 import authRoutes from "./routes/auth.routes.js";
 import jobRoutes from "./routes/job.routes.js";
 import applicationRoutes from "./routes/application.routes.js";
 import resumeRoutes from "./routes/resume.routes.js";
 import userRoutes from "./routes/user.routes.js";
-import employerRoutes from "./routes/employer.routes.js";
 import { config } from "./config/index.js";
 import { swaggerSpec, swaggerUi } from "./config/swagger.js";
-import healthService from "./services/healthService.js";
+import healthService from "./services/health.service.js";
 import logger from "./utils/logger.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
+import candidateRoutes from "./routes/candidates.routes.js";
+import activityRoutes from "./routes/activity.routes.js";
+import companyRoutes from "./routes/company.routes.js";
 
 const app = express();
 
 // ============ Middleware ============
 app.use(
   cors({
-    origin: [
-      "http://localhost:5174",
-      "http://localhost:3000",
-      "http://localhost:5173",
-    ],
+    origin: ["http://localhost:3000", "http://localhost:5173"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
@@ -84,7 +80,10 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/resumes", resumeRoutes);
 app.use("/api/users", userRoutes);
-app.use("/api/employer", employerRoutes);
+app.use("/api/candidates", candidateRoutes);
+app.use("/api/activities", activityRoutes);
+app.use("/api/company", companyRoutes);
+app.use("/api", dashboardRoutes);
 
 // Health check endpoints
 app.get("/health", async (req, res) => {

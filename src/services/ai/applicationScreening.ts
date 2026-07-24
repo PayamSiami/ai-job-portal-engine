@@ -6,6 +6,7 @@ import {
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
 import hashString from "../../utils/hashString.js";
+import { ObjectId } from "mongoose";
 
 export interface ApplicationData {
   expectedSalary?: number;
@@ -21,7 +22,6 @@ export interface ApplicationData {
 
 export interface JobDetails {
   title: string;
-  company: string;
   location: string;
   minSalary?: number;
   maxSalary?: number;
@@ -262,7 +262,6 @@ class ApplicationScreeningService {
       },
       jobDetails: {
         title: jobDetails.title,
-        company: jobDetails.company,
         location: jobDetails.location,
         minSalary: jobDetails.minSalary,
         maxSalary: jobDetails.maxSalary,
@@ -321,7 +320,6 @@ class ApplicationScreeningService {
       
       JOB DETAILS:
       Title: ${jobDetails.title}
-      Company: ${jobDetails.company}
       Location: ${jobDetails.location}
       ${jobDetails.minSalary ? `Salary Range: $${jobDetails.minSalary} - $${jobDetails.maxSalary || "Not specified"}` : ""}
       Requirements: ${jobDetails.requirements}
@@ -461,10 +459,6 @@ class ApplicationScreeningService {
       throw new Error("Job title is required");
     }
 
-    if (!jobDetails.company || jobDetails.company.trim().length === 0) {
-      throw new Error("Company name is required");
-    }
-
     if (
       !jobDetails.requirements ||
       jobDetails.requirements.trim().length === 0
@@ -491,7 +485,7 @@ class ApplicationScreeningService {
     jobDetails: JobDetails,
     maxLength: number,
   ): JobDetails {
-    const combined = `${jobDetails.title} ${jobDetails.company} ${jobDetails.location} ${jobDetails.requirements} ${jobDetails.description}`;
+    const combined = `${jobDetails.title} ${jobDetails.location} ${jobDetails.requirements} ${jobDetails.description}`;
 
     if (combined.length <= maxLength) {
       return jobDetails;

@@ -1,18 +1,23 @@
-// backend/src/routes/dashboardRoutes.ts
-import express from "express";
-import { DashboardController } from "../controllers/dashboardController.js";
-import { authorize, protect } from "../middleware/authMiddleware.js";
+// routes/dashboard.routes.ts
+import { Router } from "express";
+import dashboardController from "../controllers/dashboardController.js";
+import { protect } from "../middleware/authMiddleware.js";
 
-const router = express.Router();
-const dashboardController = new DashboardController();
+const router = Router();
 
-// All dashboard routes require authentication and employer status
-router.use(protect);
-router.use(authorize("employer"));
+// ============================================================
+// Dashboard Routes
+// ============================================================
 
-router.get("/stats", dashboardController.getStats);
+// Main Dashboard
+router.get("/stats", protect, dashboardController.getDashboardStats);
+router.get("/ai-screening", protect, dashboardController.getAIScreeningData);
 
-// AI screening data
-router.get("/ai-screening", dashboardController.getAIScreeningData);
+// Analytics
+router.get(
+  "/analytics/export",
+  protect,
+  dashboardController.exportDashboard,
+);
 
 export default router;

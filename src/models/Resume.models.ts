@@ -221,6 +221,8 @@ const resumeSchema = new Schema<IResume>(
   },
   {
     timestamps: true,
+    toJSON: { versionKey: false },
+    toObject: { versionKey: false },
   },
 );
 

@@ -1,185 +1,125 @@
-// backend/src/controllers/dashboard.controller.ts
 import { Request, Response } from "express";
-import { catchAsync } from "../utils/catchAsync.js";
+import dashboardService from "../services/dashboard.service.js";
+import { getUserId } from "../utils/routeHelpers.js";
+import { sendSuccess } from "../utils/responseFormatter.js";
 import { AppError } from "../utils/errorHandler.js";
-import DashboardService from "../services/dashboardService.js";
+import { asyncHandler } from "./base.controller.js";
+import mongoose from "mongoose";
 
-const dashboardService = new DashboardService();
+/**
+ * Dashboard Controller
+ * Handles all dashboard, analytics, candidate, and company management
+ */
+class DashboardController {
+  /**
+   * Get comprehensive dashboard statistics
+   * GET /api/dashboard/stats
+   */
+  getDashboardStats = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const userId = getUserId(req);
 
-export class DashboardController {
-  getStats = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
+      if (!userId) {
+        throw new AppError("User not authenticated", 401);
+      }
 
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
+      const stats = await dashboardService.getDashboardStats(userId);
 
-    const stats = await dashboardService.getDashboardStats(employerId);
+      sendSuccess(res, stats, "Dashboard stats fetched successfully");
+    },
+  );
 
-    res.status(200).json({
-      success: true,
-      data: stats,
-    });
-  });
+  /**
+   * Get AI screening data
+   * GET /api/dashboard/ai-screening
+   */
+  getAIScreeningData = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const userId = getUserId(req);
 
-  getAIScreeningData = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
+      if (!userId) {
+        throw new AppError("User not authenticated", 401);
+      }
 
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
+      const data = await dashboardService.getAIScreeningData(userId);
 
-    const screeningData = await dashboardService.getAIScreeningData(employerId);
+      sendSuccess(res, data, "AI screening data fetched successfully");
+    },
+  );
 
-    res.status(200).json({
-      success: true,
-      data: screeningData,
-    });
-  });
+  /**
+   * Export dashboard data
+   * GET /api/dashboard/analytics/export
+   */
+  exportDashboard = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const userId = getUserId(req);
 
-  getRecentActivity = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
-    const limit = parseInt(req.query.limit as string) || 10;
+      if (!userId) {
+        throw new AppError("User not authenticated", 401);
+      }
 
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
+      const format = (req.query.format as string) || "csv";
+      const type = (req.query.type as string) || "summary";
 
-    const activity = await dashboardService.getRecentActivity(
-      employerId,
-      limit,
-    );
+      // Validate format
+      const validFormats = ["csv", "json", "excel"];
+      if (!validFormats.includes(format)) {
+        throw new AppError(
+          `Invalid format. Must be one of: ${validFormats.join(", ")}`,
+          400,
+        );
+      }
 
-    res.status(200).json({
-      success: true,
-      data: activity,
-    });
-  });
+      // Validate type
+      const validTypes = ["summary", "applications", "candidates"];
+      if (!validTypes.includes(type)) {
+        throw new AppError(
+          `Invalid export type. Must be one of: ${validTypes.join(", ")}`,
+          400,
+        );
+      }
 
-  getApplicationStats = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
+      const exportData = await dashboardService.exportDashboard(
+        userId,
+        format,
+        type,
+      );
 
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
+      // Set headers based on format
+      const contentTypes = {
+        csv: "text/csv",
+        json: "application/json",
+        excel:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      };
 
-    const stats = await dashboardService.getApplicationStats(employerId);
+      const extensions = {
+        csv: "csv",
+        json: "json",
+        excel: "xlsx",
+      };
 
-    res.status(200).json({
-      success: true,
-      data: stats,
-    });
-  });
+      res.setHeader(
+        "Content-Type",
+        contentTypes[format as keyof typeof contentTypes],
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="dashboard-export-${type}-${new Date().toISOString().split("T")[0]}.${extensions[format as keyof typeof extensions]}`,
+      );
 
-  getJobPerformance = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
-    const { timeframe = "30" } = req.query;
+      // Send based on format
+      if (format === "json") {
+        res.json(exportData);
+        return;
+      }
 
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
-
-    const performance = await dashboardService.getJobPerformance(
-      employerId,
-      parseInt(timeframe as string),
-    );
-
-    res.status(200).json({
-      success: true,
-      data: performance,
-    });
-  });
-
-  getTopCandidates = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
-    const limit = parseInt(req.query.limit as string) || 5;
-
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
-
-    const candidates = await dashboardService.getTopCandidates(
-      employerId,
-      limit,
-    );
-
-    res.status(200).json({
-      success: true,
-      data: candidates,
-    });
-  });
-
-  getApplicationTimeline = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
-    const { days = "30", status } = req.query;
-
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
-
-    const timeline = await dashboardService.getApplicationTimeline(
-      employerId,
-      parseInt(days as string),
-      status as string,
-    );
-
-    res.status(200).json({
-      success: true,
-      data: timeline,
-    });
-  });
-
-  getSkillDistribution = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
-    const limit = parseInt(req.query.limit as string) || 10;
-
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
-
-    const skills = await dashboardService.getSkillDistribution(
-      employerId,
-      limit,
-    );
-
-    res.status(200).json({
-      success: true,
-      data: skills,
-    });
-  });
-
-  getStatusBreakdown = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
-
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
-
-    const breakdown = await dashboardService.getStatusBreakdown(employerId);
-
-    res.status(200).json({
-      success: true,
-      data: breakdown,
-    });
-  });
-
-  exportDashboard = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
-    const { format = "csv", type = "summary" } = req.query;
-
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
-
-    const exportData = await dashboardService.exportDashboard(
-      employerId,
-      format as string,
-      type as string,
-    );
-
-    res.status(200).json({
-      success: true,
-      data: exportData,
-    });
-  });
+      // For CSV and Excel, convert to appropriate format
+      // You might want to use a library like `json2csv` or `exceljs`
+      res.send(JSON.stringify(exportData));
+    },
+  );
 }
+
+export default new DashboardController();

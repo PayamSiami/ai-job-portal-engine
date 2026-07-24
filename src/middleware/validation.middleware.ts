@@ -1,6 +1,7 @@
 // src/middleware/validationMiddleware.ts
 import { Request, Response, NextFunction } from "express";
-import { body, validationResult } from "express-validator";
+import { body, ValidationChain, validationResult } from "express-validator";
+import { AppError } from "../utils/errorHandler.js";
 
 // Validation for registration
 export const validateRegistration = [
@@ -44,3 +45,43 @@ export const validateLogin = [
     next();
   },
 ];
+
+/**
+ * Validate request with express-validator
+ */
+export const validate = (validations: ValidationChain[]) => {
+  return async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    // Run all validations
+    await Promise.all(validations.map((validation) => validation.run(req)));
+
+    const errors = validationResult(req);
+    if (errors.isEmpty()) {
+      return next();
+    }
+
+    const errorMessages = errors.array().map((err) => err.msg);
+    throw new AppError(errorMessages.join(", "), 400);
+  };
+};
+
+/**
+ * Validate required fields in request body
+ */
+export const validateRequired = (fields: string[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const missingFields = fields.filter((field) => !req.body[field]);
+
+    if (missingFields.length > 0) {
+      throw new AppError(
+        `Missing required fields: ${missingFields.join(", ")}`,
+        400,
+      );
+    }
+
+    next();
+  };
+};

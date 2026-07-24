@@ -127,9 +127,9 @@ class JobService {
     }
 
     const dbQuery = Job.find(query)
+      .populate("company", "name logo industry location")
       .skip(skip)
       .limit(limit)
-      .populate("company", "name logo")
       .sort({ createdAt: -1 });
 
     const [jobs, total] = await Promise.all([

@@ -1,77 +1,82 @@
-// src/middleware/authMiddleware.ts
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import User, { IUser } from "../models/User.models.js";
-import { config } from "../config/index.js";
+import { AppError } from "../utils/errorHandler.js";
+import { getUserId } from "../utils/routeHelpers.js";
+import User from "../models/User.models.js";
 
-// Extend Express Request to include user
+// Extend Express Request type
 declare global {
   namespace Express {
     interface Request {
-      user?: IUser;
+      userId?: string;
+      user?: any;
     }
   }
 }
 
-interface DecodedToken {
-  id: string;
-  iat: number;
-  exp: number;
-}
-
+/**
+ * Protect route - verify JWT token
+ */
 export const protect = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
-  let token: string | undefined;
+  try {
+    let token: string | undefined;
 
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
-    try {
+    if (req.headers.authorization?.startsWith("Bearer")) {
       token = req.headers.authorization.split(" ")[1];
-
-      if (!token) {
-        res.status(401).json({ error: "Not authorized, no token" });
-        return;
-      }
-
-      const decoded = jwt.verify(
-        token,
-        config.JWT_SECRET as string,
-      ) as DecodedToken;
-
-      const user = await User.findById(decoded.id).select("-password");
-
-      if (!user) {
-        res.status(401).json({ error: "Not authorized, user not found" });
-        return;
-      }
-
-      req.user = user;
-      next();
-    } catch (error) {
-      res.status(401).json({ error: "Not authorized, token failed" });
     }
-  } else {
-    res.status(401).json({ error: "Not authorized, no token" });
-  }
-};
 
-export const authorize = (...roles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user) {
+    if (!token) {
+      throw new AppError(
+        "You are not logged in. Please log in to access this resource.",
+        401,
+      );
+    }
+
+    // Verify token
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "your-secret-key",
+    ) as { id: string };
+
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user) {
       res.status(401).json({ error: "Not authorized, user not found" });
       return;
     }
 
+    // Attach user ID to request
+    req.userId = decoded.id;
+    req.user = user;
+
+    next();
+  } catch (error) {
+    if (error instanceof AppError) {
+      next(error);
+    } else {
+      next(new AppError("Invalid token. Please log in again.", 401));
+    }
+  }
+};
+
+/**
+ * Authorize based on user role
+ */
+export const authorize = (...roles: string[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user || !req.user.role) {
+      throw new AppError("User role not found", 403);
+    }
+
     if (!roles.includes(req.user.role)) {
-      res.status(403).json({
-        error: `User role ${req.user.role} is not authorized to access this route`,
-      });
-      return;
+      throw new AppError(
+        `Access denied. Required role: ${roles.join(" or ")}`,
+        403,
+      );
     }
 
     next();

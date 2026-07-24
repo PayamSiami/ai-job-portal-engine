@@ -26,8 +26,8 @@ export interface ResumeData {
     company: string;
     position: string;
     location?: string;
-    startDate: Date;
-    endDate?: Date;
+    startDate: Date | string;
+    endDate?: Date | string;
     current: boolean;
     description?: string;
     achievements?: string[];
@@ -37,8 +37,8 @@ export interface ResumeData {
     degree: string;
     fieldOfStudy?: string;
     location?: string;
-    startDate: Date;
-    endDate?: Date;
+    startDate: Date | string;
+    endDate?: Date | string;
     current: boolean;
     description?: string;
     gpa?: number;
@@ -51,8 +51,8 @@ export interface ResumeData {
   certifications: Array<{
     name: string;
     issuer: string;
-    date: Date;
-    expiryDate?: Date;
+    date: Date | string;
+    expiryDate?: Date | string;
     credentialId?: string;
     url?: string;
   }>;
@@ -65,8 +65,8 @@ export interface ResumeData {
     description?: string;
     url?: string;
     technologies?: string[];
-    startDate?: Date;
-    endDate?: Date;
+    startDate?: Date | string;
+    endDate?: Date | string;
   }>;
   template: "modern" | "classic" | "minimal" | "creative";
   visibility?: string;
@@ -97,23 +97,34 @@ class PDFService {
     white: "#FFFFFF",
     success: "#10B981",
     warning: "#F59E0B",
+    sidebar: "#7C3AED",
+    sidebarLight: "#A78BFA",
+    sidebarLighter: "#DDD6FE",
   };
 
   constructor() {
     this.fontsPath = path.join(__dirname, "../../src/assets/fonts");
-    this.storagePath = path.join(__dirname, "../../uploads/resumes");
+    this.storagePath = path.join(process.cwd(), "uploads/resumes");
 
-    if (!fs.existsSync(this.fontsPath)) {
-      fs.mkdirSync(this.fontsPath, { recursive: true });
-    }
-    if (!fs.existsSync(this.storagePath)) {
-      fs.mkdirSync(this.storagePath, { recursive: true });
-    }
+    // Create directories if they don't exist
+    [this.fontsPath, this.storagePath].forEach((dir) => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
+
+    logger.info("PDFService initialized", {
+      fontsPath: this.fontsPath,
+      storagePath: this.storagePath,
+    });
   }
 
+  /**
+   * Convert database resume object to ResumeData interface
+   */
   private convertToResumeData(resume: any): ResumeData {
     return {
-      id: resume._id?.toString(),
+      id: resume._id?.toString() || resume.id,
       title: resume.title || "Untitled Resume",
       personalInfo: {
         firstName: resume.personalInfo?.firstName || "",
@@ -127,58 +138,52 @@ class PDFService {
         summary: resume.personalInfo?.summary || "",
         title: resume.personalInfo?.title || "",
       },
-      experience:
-        resume.experience?.map((exp: any) => ({
-          company: exp.company || "",
-          position: exp.position || "",
-          location: exp.location || "",
-          startDate: exp.startDate || new Date(),
-          endDate: exp.endDate,
-          current: exp.current || false,
-          description: exp.description || "",
-          achievements: exp.achievements || [],
-        })) || [],
-      education:
-        resume.education?.map((edu: any) => ({
-          institution: edu.institution || "",
-          degree: edu.degree || "",
-          fieldOfStudy: edu.fieldOfStudy || "",
-          location: edu.location || "",
-          startDate: edu.startDate || new Date(),
-          endDate: edu.endDate,
-          current: edu.current || false,
-          description: edu.description || "",
-          gpa: edu.gpa,
-        })) || [],
-      skills:
-        resume.skills?.map((skill: any) => ({
-          name: skill.name || "",
-          level: skill.level || "intermediate",
-          category: skill.category || "",
-        })) || [],
-      certifications:
-        resume.certifications?.map((cert: any) => ({
-          name: cert.name || "",
-          issuer: cert.issuer || "",
-          date: cert.date || new Date(),
-          expiryDate: cert.expiryDate,
-          credentialId: cert.credentialId || "",
-          url: cert.url || "",
-        })) || [],
-      languages:
-        resume.languages?.map((lang: any) => ({
-          name: lang.name || "",
-          proficiency: lang.proficiency || "professional",
-        })) || [],
-      projects:
-        resume.projects?.map((project: any) => ({
-          name: project.name || "",
-          description: project.description || "",
-          url: project.url || "",
-          technologies: project.technologies || [],
-          startDate: project.startDate,
-          endDate: project.endDate,
-        })) || [],
+      experience: (resume.experience || []).map((exp: any) => ({
+        company: exp.company || "",
+        position: exp.position || exp.title || "",
+        location: exp.location || "",
+        startDate: exp.startDate || new Date(),
+        endDate: exp.endDate || undefined,
+        current: exp.current || false,
+        description: exp.description || "",
+        achievements: exp.achievements || [],
+      })),
+      education: (resume.education || []).map((edu: any) => ({
+        institution: edu.institution || "",
+        degree: edu.degree || "",
+        fieldOfStudy: edu.fieldOfStudy || "",
+        location: edu.location || "",
+        startDate: edu.startDate || new Date(),
+        endDate: edu.endDate || undefined,
+        current: edu.current || false,
+        description: edu.description || "",
+        gpa: edu.gpa || undefined,
+      })),
+      skills: (resume.skills || []).map((skill: any) => ({
+        name: skill.name || "",
+        level: skill.level || "intermediate",
+        category: skill.category || "",
+      })),
+      certifications: (resume.certifications || []).map((cert: any) => ({
+        name: cert.name || "",
+        issuer: cert.issuer || cert.issuingOrganization || "",
+        date: cert.date || cert.issueDate || new Date(),
+        expiryDate: cert.expiryDate || cert.expirationDate || undefined,
+        credentialId: cert.credentialId || "",
+        url: cert.url || "",
+      })),
+      languages: (resume.languages || []).map((lang: any) => ({
+        name: lang.name || "",
+        proficiency: lang.proficiency || "professional",
+      })),
+      projects: (resume.projects || []).map((project: any) => ({
+        name: project.name || "",
+        description: project.description || "",
+        url: project.url || "",
+        technologies: project.technologies || [],
+        startDate: project.startDate || undefined,
+        endDate: project.endDate || undefined,
+      })),
       template: resume.template || "modern",
       visibility: resume.visibility || "private",
       status: resume.status || "draft",
@@ -186,71 +191,92 @@ class PDFService {
     };
   }
 
-  private async generateResumePDF(
+  /**
+   * Main method to generate PDF from resume data
+   */
+  async generateResumePDF(
     resume: any,
     template: string = "modern",
   ): Promise<Buffer> {
-    const resumeData = resume._id
-      ? this.convertToResumeData(resume)
-      : (resume as ResumeData);
+    try {
+      // Convert to ResumeData if it's a database object
+      const resumeData = resume._id || resume.id
+        ? this.convertToResumeData(resume)
+        : (resume as ResumeData);
 
-    return new Promise((resolve, reject) => {
-      try {
-        const doc = new PDFDocument({
-          size: "A4",
-          margin: 50,
-          info: {
-            Title: `Resume - ${resumeData.personalInfo.firstName} ${resumeData.personalInfo.lastName}`,
-            Author:
-              resumeData.personalInfo.firstName +
-              " " +
-              resumeData.personalInfo.lastName,
-          },
-        });
-
-        const chunks: Buffer[] = [];
-        doc.on("data", (chunk) => chunks.push(chunk));
-        doc.on("end", () => resolve(Buffer.concat(chunks)));
-
-        switch (template) {
-          case "modern":
-            this.generateModernTemplate(doc, resumeData);
-            break;
-          case "classic":
-            this.generateClassicTemplate(doc, resumeData);
-            break;
-          case "minimal":
-            this.generateMinimalTemplate(doc, resumeData);
-            break;
-          case "creative":
-            this.generateCreativeTemplate(doc, resumeData);
-            break;
-          default:
-            this.generateModernTemplate(doc, resumeData);
-        }
-
-        // Add page numbers
-        const pages = doc.bufferedPageRange();
-        for (let i = 0; i < pages.count; i++) {
-          doc.switchToPage(i);
-          doc
-            .fillColor(this.colors.textMuted)
-            .fontSize(8)
-            .font("Helvetica")
-            .text(`Page ${i + 1} of ${pages.count}`, 50, doc.page.height - 30, {
-              align: "center",
-              width: doc.page.width - 100,
-            });
-        }
-
-        doc.end();
-      } catch (error) {
-        logger.error("Failed to generate PDF:", error);
-        reject(error);
+      // Validate required data
+      if (!resumeData.personalInfo?.firstName || !resumeData.personalInfo?.lastName) {
+        throw new Error("Resume must have at least first name and last name");
       }
-    });
+
+      return new Promise((resolve, reject) => {
+        try {
+          const doc = new PDFDocument({
+            size: "A4",
+            margin: 50,
+            info: {
+              Title: `Resume - ${resumeData.personalInfo.firstName} ${resumeData.personalInfo.lastName}`,
+              Author: `${resumeData.personalInfo.firstName} ${resumeData.personalInfo.lastName}`,
+              Subject: "Professional Resume",
+              Keywords: "resume, cv, job application",
+            },
+          });
+
+          const chunks: Buffer[] = [];
+          doc.on("data", (chunk) => chunks.push(chunk));
+          doc.on("end", () => resolve(Buffer.concat(chunks)));
+          doc.on("error", (error) => reject(error));
+
+          // Generate template
+          switch (template) {
+            case "modern":
+              this.generateModernTemplate(doc, resumeData);
+              break;
+            case "classic":
+              this.generateClassicTemplate(doc, resumeData);
+              break;
+            case "minimal":
+              this.generateMinimalTemplate(doc, resumeData);
+              break;
+            case "creative":
+              this.generateCreativeTemplate(doc, resumeData);
+              break;
+            default:
+              this.generateModernTemplate(doc, resumeData);
+          }
+
+          // Add page numbers
+          const pages = doc.bufferedPageRange();
+          for (let i = 0; i < pages.count; i++) {
+            doc.switchToPage(i);
+            doc
+              .fillColor(this.colors.textMuted)
+              .fontSize(8)
+              .font("Helvetica")
+              .text(`Page ${i + 1} of ${pages.count}`, 50, doc.page.height - 30, {
+                align: "center",
+                width: doc.page.width - 100,
+              });
+          }
+
+          doc.end();
+        } catch (error) {
+          logger.error("PDF generation failed:", error);
+          reject(error);
+        }
+      });
+    } catch (error) {
+      logger.error("Failed to generate resume PDF:", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        template,
+      });
+      throw error;
+    }
   }
 
+  /**
+   * Generate and save PDF to storage
+   */
   async generateAndSavePDF(
     resume: any,
     template: string = "modern",
@@ -259,14 +285,16 @@ class PDFService {
       const pdfBuffer = await this.generateResumePDF(resume, template);
 
       const timestamp = Date.now();
-      const resumeId = resume._id || resume.id || "unknown";
+      const resumeId = resume._id?.toString() || resume.id || "unknown";
       const filename = `resume-${resumeId}-${timestamp}.pdf`;
       const filePath = path.join(this.storagePath, filename);
 
+      // Ensure directory exists
       if (!fs.existsSync(this.storagePath)) {
         fs.mkdirSync(this.storagePath, { recursive: true });
       }
 
+      // Save file
       fs.writeFileSync(filePath, pdfBuffer);
       const stats = fs.statSync(filePath);
 
@@ -293,8 +321,15 @@ class PDFService {
     }
   }
 
+  /**
+   * Get PDF file path for a resume
+   */
   getPDFPath(resumeId: string): string | null {
     try {
+      if (!fs.existsSync(this.storagePath)) {
+        return null;
+      }
+
       const files = fs.readdirSync(this.storagePath);
       const pdfFile = files.find(
         (file) => file.includes(resumeId) && file.endsWith(".pdf"),
@@ -310,15 +345,32 @@ class PDFService {
     }
   }
 
+  /**
+   * Get all PDFs for a user
+   */
+  getUserPDFs(userId: string): string[] {
+    try {
+      if (!fs.existsSync(this.storagePath)) {
+        return [];
+      }
+
+      const files = fs.readdirSync(this.storagePath);
+      return files
+        .filter((file) => file.includes(userId) && file.endsWith(".pdf"))
+        .map((file) => path.join(this.storagePath, file));
+    } catch (error) {
+      logger.error("Failed to get user PDFs:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Delete a PDF file
+   */
   deletePDF(resumeId: string): boolean {
     try {
-      const files = fs.readdirSync(this.storagePath);
-      const pdfFile = files.find(
-        (file) => file.includes(resumeId) && file.endsWith(".pdf"),
-      );
-
-      if (pdfFile) {
-        const filePath = path.join(this.storagePath, pdfFile);
+      const filePath = this.getPDFPath(resumeId);
+      if (filePath && fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
         logger.info("PDF deleted successfully", { resumeId, filePath });
         return true;
@@ -330,14 +382,63 @@ class PDFService {
     }
   }
 
+  /**
+   * Clean up old PDFs (older than 30 days)
+   */
+  cleanupOldPDFs(daysOld: number = 30): number {
+    try {
+      if (!fs.existsSync(this.storagePath)) {
+        return 0;
+      }
+
+      const files = fs.readdirSync(this.storagePath);
+      const now = Date.now();
+      const maxAge = daysOld * 24 * 60 * 60 * 1000;
+      let deleted = 0;
+
+      for (const file of files) {
+        if (file.endsWith(".pdf")) {
+          const filePath = path.join(this.storagePath, file);
+          const stats = fs.statSync(filePath);
+          if (now - stats.mtimeMs > maxAge) {
+            fs.unlinkSync(filePath);
+            deleted++;
+          }
+        }
+      }
+
+      logger.info(`Cleaned up ${deleted} old PDFs`);
+      return deleted;
+    } catch (error) {
+      logger.error("Failed to cleanup old PDFs:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get PDF as base64 string
+   */
+  async getPDFAsBase64(resume: any, template: string = "modern"): Promise<string> {
+    const buffer = await this.generateResumePDF(resume, template);
+    return buffer.toString("base64");
+  }
+
+  // ============================================
+  // HELPER METHODS
+  // ============================================
+
   private formatDate(date: Date | string | undefined): string {
     if (!date) return "";
-    const d = typeof date === "string" ? new Date(date) : date;
-    if (isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      year: "numeric",
-    });
+    try {
+      const d = typeof date === "string" ? new Date(date) : date;
+      if (isNaN(d.getTime())) return "";
+      return d.toLocaleDateString("en-US", {
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "";
+    }
   }
 
   private getLevelIcon(level?: string): string {
@@ -366,9 +467,42 @@ class PDFService {
     }
   }
 
-  /**
-   * MODERN TEMPLATE - Clean, professional with accent colors
-   */
+  private getProficiencyLabel(proficiency?: string): string {
+    switch (proficiency) {
+      case "native":
+        return "Native";
+      case "professional":
+        return "Professional";
+      case "conversational":
+        return "Conversational";
+      case "basic":
+        return "Basic";
+      default:
+        return "";
+    }
+  }
+
+  private renderSidebarSection(
+    doc: PDFKit.PDFDocument,
+    title: string,
+    x: number,
+    y: number,
+  ): void {
+    doc
+      .fillColor("#F3E8FF")
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .text(title, x, y);
+    doc
+      .moveTo(x, y + 12)
+      .lineTo(x + 100, y + 12)
+      .stroke("#A78BFA");
+  }
+
+  // ============================================
+  // TEMPLATE: MODERN
+  // ============================================
+
   private generateModernTemplate(
     doc: PDFKit.PDFDocument,
     resume: ResumeData,
@@ -383,11 +517,9 @@ class PDFService {
       projects,
     } = resume;
 
-    // Header with gradient-like effect
+    // Header
     const headerHeight = 140;
     doc.rect(50, 50, 495, headerHeight).fill(this.colors.primary);
-
-    // Decorative accent
     doc.rect(50, 50, 495, 4).fill(this.colors.primaryDark);
 
     // Name
@@ -464,9 +596,9 @@ class PDFService {
     const rightCol = 290;
     const colWidth = 205;
 
-    // LEFT COLUMN - Skills, Languages, Certifications
     let leftY = y;
 
+    // LEFT COLUMN - Skills, Languages, Certifications
     // Skills
     if (skills && skills.length > 0) {
       doc
@@ -544,12 +676,12 @@ class PDFService {
           .fontSize(9)
           .font("Helvetica")
           .text(`${lang.name} ${stars}`, leftCol, leftY);
-        leftY += 16;
+        leftY += 14;
         doc
           .fillColor(this.colors.textLight)
           .fontSize(7)
           .font("Helvetica")
-          .text(`(${lang.proficiency})`, leftCol + 10, leftY);
+          .text(`(${this.getProficiencyLabel(lang.proficiency)})`, leftCol + 10, leftY);
         leftY += 16;
       });
 
@@ -613,7 +745,7 @@ class PDFService {
 
       rightY += 26;
 
-      experience.forEach((exp, index) => {
+      experience.forEach((exp) => {
         // Position
         doc
           .fillColor(this.colors.secondary)
@@ -1132,7 +1264,7 @@ class PDFService {
       y += 28;
 
       const languagesText = languages
-        .map((l) => `${l.name} (${l.proficiency})`)
+        .map((l) => `${l.name} (${this.getProficiencyLabel(l.proficiency)})`)
         .join("  •  ");
       doc
         .fillColor(this.colors.text)
@@ -1330,7 +1462,7 @@ class PDFService {
       y += 20;
 
       const languagesText = languages
-        .map((l) => `${l.name} (${l.proficiency})`)
+        .map((l) => `${l.name} (${this.getProficiencyLabel(l.proficiency)})`)
         .join("  •  ");
       doc
         .fillColor(this.colors.text)
@@ -1364,8 +1496,8 @@ class PDFService {
     const contentX = 50 + sidebarWidth + 25;
     const contentWidth = 495 - sidebarWidth - 25;
 
-    // Sidebar background with gradient effect
-    doc.rect(50, 50, sidebarWidth, 742).fill("#7C3AED");
+    // Sidebar background
+    doc.rect(50, 50, sidebarWidth, 742).fill(this.colors.sidebar);
     doc.rect(50, 50, sidebarWidth, 742).fillOpacity(0.95);
 
     // Sidebar content
@@ -1417,55 +1549,25 @@ class PDFService {
     this.renderSidebarSection(doc, "CONTACT", 60, sidebarY);
     sidebarY += 18;
 
-    if (personalInfo.email) {
-      doc
-        .fillColor("#DDD6FE")
-        .fontSize(8)
-        .font("Helvetica")
-        .text(`✉ ${personalInfo.email}`, 65, sidebarY, {
-          width: sidebarWidth - 30,
-        });
-      sidebarY += 14;
-    }
-    if (personalInfo.phone) {
-      doc
-        .fillColor("#DDD6FE")
-        .fontSize(8)
-        .font("Helvetica")
-        .text(`📞 ${personalInfo.phone}`, 65, sidebarY, {
-          width: sidebarWidth - 30,
-        });
-      sidebarY += 14;
-    }
-    if (personalInfo.location) {
-      doc
-        .fillColor("#DDD6FE")
-        .fontSize(8)
-        .font("Helvetica")
-        .text(`📍 ${personalInfo.location}`, 65, sidebarY, {
-          width: sidebarWidth - 30,
-        });
-      sidebarY += 14;
-    }
-    if (personalInfo.linkedin) {
-      doc
-        .fillColor("#DDD6FE")
-        .fontSize(8)
-        .font("Helvetica")
-        .text(`🔗 ${personalInfo.linkedin}`, 65, sidebarY, {
-          width: sidebarWidth - 30,
-        });
-      sidebarY += 14;
-    }
-    if (personalInfo.github) {
-      doc
-        .fillColor("#DDD6FE")
-        .fontSize(8)
-        .font("Helvetica")
-        .text(`💻 ${personalInfo.github}`, 65, sidebarY, {
-          width: sidebarWidth - 30,
-        });
-      sidebarY += 14;
+    const contactFields = [
+      { icon: "✉", value: personalInfo.email },
+      { icon: "📞", value: personalInfo.phone },
+      { icon: "📍", value: personalInfo.location },
+      { icon: "🔗", value: personalInfo.linkedin },
+      { icon: "💻", value: personalInfo.github },
+    ];
+
+    for (const field of contactFields) {
+      if (field.value) {
+        doc
+          .fillColor("#DDD6FE")
+          .fontSize(8)
+          .font("Helvetica")
+          .text(`${field.icon} ${field.value}`, 65, sidebarY, {
+            width: sidebarWidth - 30,
+          });
+        sidebarY += 14;
+      }
     }
 
     sidebarY += 10;
@@ -1639,7 +1741,7 @@ class PDFService {
           doc.addPage();
           y = 50;
           // Re-draw sidebar on new page
-          doc.rect(50, 50, sidebarWidth, 742).fill("#7C3AED");
+          doc.rect(50, 50, sidebarWidth, 742).fill(this.colors.sidebar);
           doc.rect(50, 50, sidebarWidth, 742).fillOpacity(0.95);
         }
       });
@@ -1650,7 +1752,7 @@ class PDFService {
       if (y > 650) {
         doc.addPage();
         y = 50;
-        doc.rect(50, 50, sidebarWidth, 742).fill("#7C3AED");
+        doc.rect(50, 50, sidebarWidth, 742).fill(this.colors.sidebar);
         doc.rect(50, 50, sidebarWidth, 742).fillOpacity(0.95);
       }
 
@@ -1713,7 +1815,7 @@ class PDFService {
       if (y > 650) {
         doc.addPage();
         y = 50;
-        doc.rect(50, 50, sidebarWidth, 742).fill("#7C3AED");
+        doc.rect(50, 50, sidebarWidth, 742).fill(this.colors.sidebar);
         doc.rect(50, 50, sidebarWidth, 742).fillOpacity(0.95);
       }
 
@@ -1771,23 +1873,6 @@ class PDFService {
         y += 15;
       });
     }
-  }
-
-  private renderSidebarSection(
-    doc: PDFKit.PDFDocument,
-    title: string,
-    x: number,
-    y: number,
-  ): void {
-    doc
-      .fillColor("#F3E8FF")
-      .fontSize(9)
-      .font("Helvetica-Bold")
-      .text(title, x, y);
-    doc
-      .moveTo(x, y + 12)
-      .lineTo(x + 100, y + 12)
-      .stroke("#A78BFA");
   }
 }
 

@@ -479,6 +479,250 @@ Provide specific, actionable suggestions.
       stats: this.cache.getStats(),
     };
   }
+
+  /**
+   * ✅ Get improvement suggestions for a resume
+   */
+  async getImprovementSuggestions(
+    resumeContent: string,
+    options: any = {},
+  ): Promise<any[]> {
+    try {
+      const {
+        includeContentSuggestions = true,
+        includeFormattingSuggestions = true,
+        includeKeywordSuggestions = true,
+        includeActionVerbs = true,
+      } = options;
+
+      // Check cache
+      const cacheKey = `improvements_${resumeContent.substring(0, 100)}`;
+      const cachedResult = this.cache.get<any[]>(cacheKey); // ✅ Use get with type
+
+      if (cachedResult) {
+        logger.info(`✅ Returning cached improvements for ${cacheKey}`);
+        return cachedResult;
+      }
+
+      // If AI model is not available, return fallback suggestions
+      if (!this.model) {
+        return this.getFallbackImprovements(resumeContent);
+      }
+
+      // Build prompt for improvement suggestions
+      const prompt = this.buildImprovementPrompt(
+        resumeContent,
+        includeContentSuggestions,
+        includeFormattingSuggestions,
+        includeKeywordSuggestions,
+        includeActionVerbs,
+      );
+
+      const result = await this.model.generateContent(prompt);
+      const response = result.response.text();
+      const suggestions = this.parseImprovementSuggestions(response);
+
+      // Cache results
+      this.cache.set(cacheKey, suggestions);
+
+      return suggestions;
+    } catch (error) {
+      logger.error("Error getting improvement suggestions:", error);
+      return this.getFallbackImprovements(resumeContent);
+    }
+  }
+
+  /**
+   * Build improvement suggestion prompt
+   */
+  private buildImprovementPrompt(
+    resumeContent: string,
+    includeContent: boolean,
+    includeFormatting: boolean,
+    includeKeywords: boolean,
+    includeActionVerbs: boolean,
+  ): string {
+    let prompt = `
+      You are an expert resume reviewer. Analyze the following resume and provide detailed improvement suggestions.
+
+      Resume:
+      ${resumeContent}
+
+      Please provide improvement suggestions in the following categories:
+    `;
+
+    if (includeContent) {
+      prompt += `
+        - Content Suggestions: What content is missing or could be improved?
+        - Experience Descriptions: How can work experience be described better?
+        - Achievements: Are achievements properly highlighted?
+      `;
+    }
+
+    if (includeFormatting) {
+      prompt += `
+        - Formatting: How can the resume be better formatted?
+        - Structure: Is the information organized effectively?
+        - Readability: How can readability be improved?
+      `;
+    }
+
+    if (includeKeywords) {
+      prompt += `
+        - Keywords: What industry keywords are missing?
+        - Skills: Are relevant skills properly listed?
+        - Industry Terms: Are appropriate industry terms used?
+      `;
+    }
+
+    if (includeActionVerbs) {
+      prompt += `
+        - Action Verbs: Are strong action verbs used?
+        - Impact Statements: Are impact statements clear?
+        - Quantification: Are achievements quantified?
+      `;
+    }
+
+    prompt += `
+      For each suggestion, provide:
+      1. Category (Content, Formatting, Keywords, or Action Verbs)
+      2. Priority (high, medium, or low)
+      3. Specific suggestion
+      4. Current text (if applicable)
+      5. Suggested improvement
+      6. Reason for the suggestion
+
+      Format the response as a JSON array of objects with these fields:
+      {
+        "category": string,
+        "priority": "high" | "medium" | "low",
+        "suggestion": string,
+        "currentText": string (optional),
+        "suggestedText": string (optional),
+        "reason": string
+      }
+
+      Return only the JSON array, no other text.
+    `;
+
+    return prompt;
+  }
+
+  /**
+   * Parse improvement suggestions from AI response
+   */
+  private parseImprovementSuggestions(response: string): any[] {
+    try {
+      // Try to extract JSON from the response
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error("No JSON array found in response");
+      }
+
+      const suggestions = JSON.parse(jsonMatch[0]);
+
+      // Validate and format suggestions
+      return suggestions.map((s: any) => ({
+        category: s.category || "General",
+        priority: s.priority || "medium",
+        suggestion: s.suggestion || "",
+        currentText: s.currentText || "",
+        suggestedText: s.suggestedText || "",
+        reason: s.reason || "",
+      }));
+    } catch (error) {
+      logger.error("Error parsing improvement suggestions:", error);
+      return this.getFallbackImprovements("");
+    }
+  }
+
+  /**
+   * Get fallback improvements when AI is unavailable
+   */
+  private getFallbackImprovements(resumeContent: string): any[] {
+    const suggestions: any[] = [];
+
+    // Check for common issues
+    if (!resumeContent || resumeContent.length < 100) {
+      suggestions.push({
+        category: "Content",
+        priority: "high",
+        suggestion: "Add more content to your resume",
+        currentText: "Resume is too short",
+        suggestedText: "Expand on your experience and skills",
+        reason: "Recruiters expect detailed resumes",
+      });
+    }
+
+    // Check for missing sections
+    if (
+      !resumeContent.includes("experience") &&
+      !resumeContent.includes("Experience")
+    ) {
+      suggestions.push({
+        category: "Content",
+        priority: "high",
+        suggestion: "Add work experience section",
+        currentText: "No experience section found",
+        suggestedText: "Include a detailed work experience section",
+        reason: "Work experience is the most important section",
+      });
+    }
+
+    if (!resumeContent.includes("skill") && !resumeContent.includes("Skill")) {
+      suggestions.push({
+        category: "Keywords",
+        priority: "high",
+        suggestion: "Add skills section",
+        currentText: "No skills section found",
+        suggestedText: "Include a skills section with relevant keywords",
+        reason: "Skills are crucial for ATS screening",
+      });
+    }
+
+    // Check for quantified achievements
+    const hasNumbers = /\d+/.test(resumeContent);
+    if (!hasNumbers) {
+      suggestions.push({
+        category: "Action Verbs",
+        priority: "medium",
+        suggestion: "Add quantified achievements",
+        currentText: "No numbers or metrics found",
+        suggestedText: "Add numbers, percentages, and metrics to achievements",
+        reason: "Quantified achievements are more impactful",
+      });
+    }
+
+    // Add general suggestions
+    suggestions.push({
+      category: "Formatting",
+      priority: "medium",
+      suggestion: "Use consistent formatting",
+      currentText: "Inconsistent formatting detected",
+      suggestedText: "Use consistent font, size, and spacing",
+      reason: "Consistent formatting improves readability",
+    });
+
+    suggestions.push({
+      category: "Keywords",
+      priority: "medium",
+      suggestion: "Include industry keywords",
+      currentText: "Limited industry keywords found",
+      suggestedText: "Research and include relevant industry keywords",
+      reason: "Keywords help with ATS filtering",
+    });
+
+    suggestions.push({
+      category: "Content",
+      priority: "low",
+      suggestion: "Add a professional summary",
+      currentText: "No professional summary found",
+      suggestedText: "Include a 2-3 sentence professional summary",
+      reason: "A good summary grabs attention",
+    });
+
+    return suggestions;
+  }
 }
 
 export default new ResumeAnalyzerService();

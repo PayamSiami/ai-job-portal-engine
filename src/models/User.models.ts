@@ -102,6 +102,8 @@ const userSchema = new Schema<IUser>(
   },
   {
     timestamps: true,
+     toJSON: { versionKey: false },
+    toObject: { versionKey: false },
   },
 );
 

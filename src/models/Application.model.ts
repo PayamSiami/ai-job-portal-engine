@@ -1,22 +1,20 @@
 // backend/src/models/Application.model.ts
 import mongoose, { Schema, Document } from "mongoose";
 
-// ==================== Enums ====================
-
 export enum ApplicationStatus {
-  PENDING = "pending", // Initial state, waiting for review
-  REVIEWING = "reviewing", // Being reviewed by employer
-  SHORTLISTED = "shortlisted", // Candidate selected for next round
-  INTERVIEWING = "interviewing", // In interview process
-  HIRED = "hired", // Candidate hired
-  REJECTED = "rejected", // Candidate rejected
-  WITHDRAWN = "withdrawn", // Candidate withdrew their application
+  PENDING = "pending",
+  REVIEWING = "reviewing",
+  SHORTLISTED = "shortlisted",
+  INTERVIEWING = "interviewing",
+  HIRED = "hired",
+  REJECTED = "rejected",
+  WITHDRAWN = "withdrawn",
 }
 
 export interface IApplication extends Document {
-  jobId: mongoose.Types.ObjectId;
-  userId: mongoose.Types.ObjectId;
-  resumeId?: mongoose.Types.ObjectId;
+  job: mongoose.Types.ObjectId;
+  user: mongoose.Types.ObjectId;
+  resume?: mongoose.Types.ObjectId;
   coverLetter?: string;
   expectedSalary?: number;
   availableFrom?: Date;
@@ -35,26 +33,27 @@ export interface IApplication extends Document {
   }>;
   withdrawalReason?: string;
   withdrawnAt?: Date;
+  interview?: mongoose.Types.ObjectId;
+  hiredAt?: Date;
+  rejectedAt?: Date;
   appliedAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// ==================== Schema ====================
-
 const applicationSchema = new Schema<IApplication>(
   {
-    jobId: {
+    job: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Job",
       required: true,
     },
-    userId: {
+    user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    resumeId: {
+    resume: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Resume",
     },
@@ -98,28 +97,31 @@ const applicationSchema = new Schema<IApplication>(
       type: String,
       maxlength: 1000,
     },
-    statusHistory: [
-      {
-        status: {
-          type: String,
-          enum: Object.values(ApplicationStatus),
-          required: true,
+    statusHistory: {
+      type: [
+        {
+          status: {
+            type: String,
+            enum: Object.values(ApplicationStatus),
+            required: true,
+          },
+          notes: {
+            type: String,
+            default: "",
+          },
+          updatedAt: {
+            type: Date,
+            default: Date.now,
+          },
+          updatedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+          },
         },
-        notes: {
-          type: String,
-          default: "",
-        },
-        updatedAt: {
-          type: Date,
-          default: Date.now,
-        },
-        updatedBy: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
-        },
-      },
-    ],
+      ],
+      default: [],
+    },
     withdrawalReason: {
       type: String,
       maxlength: 500,
@@ -127,30 +129,38 @@ const applicationSchema = new Schema<IApplication>(
     withdrawnAt: {
       type: Date,
     },
+    interview: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Interview",
+    },
+    hiredAt: {
+      type: Date,
+    },
+    rejectedAt: {
+      type: Date,
+    },
     appliedAt: {
       type: Date,
       default: Date.now,
+      index: true,
     },
   },
   {
     timestamps: true,
+    toJSON: { versionKey: false },
+    toObject: { versionKey: false },
   },
 );
 
-// ==================== Indexes ====================
-
-applicationSchema.index({ jobId: 1, userId: 1 }, { unique: true });
-applicationSchema.index({ userId: 1 });
-applicationSchema.index({ jobId: 1 });
-applicationSchema.index({ status: 1 });
-applicationSchema.index({ appliedAt: -1 });
-applicationSchema.index({ aiScore: -1 });
-
-// ==================== Model ====================
+// Indexes
+applicationSchema.index({ job: 1, userId: 1 }, { unique: true });
+applicationSchema.index({ userId: 1, status: 1 });
+applicationSchema.index({ job: 1, status: 1 });
+applicationSchema.index({ status: 1, appliedAt: -1 });
+applicationSchema.index({ interview: 1 });
 
 const Application = mongoose.model<IApplication>(
   "Application",
   applicationSchema,
 );
-
 export default Application;

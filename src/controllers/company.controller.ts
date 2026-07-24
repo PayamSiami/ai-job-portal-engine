@@ -1,11 +1,8 @@
 // backend/src/controllers/company.controller.ts
 import { Request, Response } from "express";
-import { CompanyService } from "../services/company.service.js";
 import { catchAsync } from "../utils/catchAsync.js";
 import { AppError } from "../utils/errorHandler.js";
-import Application from "../models/Application.model.js";
-
-const companyService = new CompanyService();
+import companyService from "../services/company.service.js";
 
 export class CompanyController {
   createCompany = catchAsync(async (req: Request, res: Response) => {

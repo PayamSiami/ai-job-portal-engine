@@ -102,6 +102,8 @@ export interface ICompany extends Document {
   verifiedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  isDeleted: boolean;
+  deletedAt: Date;
 }
 
 // ==================== Schema ====================
@@ -236,11 +238,18 @@ const CompanySchema = new Schema<ICompany>(
     verifiedAt: {
       type: Date,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+    toJSON: { virtuals: true, versionKey: false },
+    toObject: { virtuals: true, versionKey: false },
   },
 );
 
@@ -300,14 +309,14 @@ CompanySchema.index({ "location.city": 1, "location.country": 1 });
 CompanySchema.virtual("totalJobs", {
   ref: "Job",
   localField: "_id",
-  foreignField: "companyId",
+  foreignField: "company",
   count: true,
 });
 
 CompanySchema.virtual("activeJobs", {
   ref: "Job",
   localField: "_id",
-  foreignField: "companyId",
+  foreignField: "company",
   count: true,
   match: { isActive: true },
 });

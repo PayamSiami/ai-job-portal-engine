@@ -1,10 +1,11 @@
 // backend/src/services/candidate.service.ts
-import { Model, PipelineStage, Types } from "mongoose";
+import mongoose, { Model, Types } from "mongoose";
 import Job from "../models/Job.models.js";
-import Application from "../models/Application.model.js";
+import Application, { ApplicationStatus } from "../models/Application.model.js";
 import Resume from "../models/Resume.models.js";
-import { AppError } from "../utils/errorHandler.js";
 import User from "../models/User.models.js";
+import jobService from "./job.service.js";
+import logger from "../utils/logger.js";
 
 // Types
 interface FilterOptions {
@@ -74,23 +75,6 @@ interface PaginationOptions {
   sortOrder: string;
 }
 
-interface Candidate {
-  _id: Types.ObjectId;
-  userId: Types.ObjectId;
-  name: string;
-  email: string;
-  phone: string;
-  position: string;
-  status: string;
-  experience: number;
-  skills: any[];
-  location: string;
-  appliedDate: Date;
-  resume: any;
-  score: number;
-  notes: string;
-}
-
 interface AnalyticsData {
   totalApplications: number;
   byStatus: any[];
@@ -116,148 +100,140 @@ export class CandidateService {
   /**
    * Get candidates with filters and pagination
    */
+
   async getCandidates(
     employerId: string,
-    filters: FilterOptions,
-    options: PaginationOptions,
+    filters: any,
+    options: { page: number; limit: number; sortBy: string; sortOrder: string },
   ): Promise<{
-    candidates: Candidate[];
+    candidates: any[];
     total: number;
     statusSummary: any[];
   }> {
-    const { page, limit, sortBy, sortOrder } = options;
-    const skip = (page - 1) * limit;
+    try {
+      // Validate employer ID
+      if (!mongoose.Types.ObjectId.isValid(employerId)) {
+        throw new Error("Invalid employer ID format");
+      }
 
-    // ***************
+      const { page, limit, sortBy = "createdAt", sortOrder = "desc" } = options;
+      const skip = (page - 1) * limit;
 
-    // Debug: Check jobs and applications
-    const jobs = await this.Job.find({ postedBy: employerId });
-    console.log("📊 Jobs found:", jobs.length);
-    console.log(
-      "Job IDs:",
-      jobs.map((j) => j._id),
-    );
+      // Get all jobs for this employer
+      const jobs = await jobService.getJobsByEmployer(employerId);
+      const jobIds = jobs.map((job: any) => job._id);
 
-    const jobId = jobs.map((j) => j._id);
-    const applications = await Application.find({
-      jobId: { $in: jobId },
-    });
-    console.log("📊 Applications found:", applications.length);
-    console.log("Sample application:", applications[0]);
+      if (jobIds.length === 0) {
+        return {
+          candidates: [],
+          total: 0,
+          statusSummary: [],
+        };
+      }
 
-    // ******************
-
-    // First, get all jobs posted by this employer
-    const employerJobs = await this.Job.find({
-      postedBy: employerId,
-      isDeleted: { $ne: true },
-    }).select("_id");
-
-    const jobIds = employerJobs.map((job: any) => job._id);
-
-    // If no jobs, return empty result
-    if (jobIds.length === 0) {
-      return {
-        candidates: [],
-        total: 0,
-        statusSummary: [],
+      // Build match stage
+      const matchStage: any = {
+        job: { $in: jobIds },
       };
-    }
 
-    // Build match stage for applications
-    const matchStage: any = {
-      jobId: { $in: jobIds },
-    };
+      // Add status filter
+      if (filters.status && filters.status !== "all") {
+        matchStage.status = filters.status;
+      }
 
-    // Add filters to match stage
-    if (filters.status) {
-      matchStage.status = filters.status;
-    }
-
-    // Get applications with filters
-    const pipeline: PipelineStage[] = [
-      {
-        $match: matchStage,
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "userId",
-          foreignField: "_id",
-          as: "user",
+      // Build the pipeline
+      const pipeline: any[] = [
+        {
+          $match: matchStage,
         },
-      },
-      {
-        $unwind: "$user",
-      },
-      {
-        $lookup: {
-          from: "resumes",
-          localField: "userId",
-          foreignField: "userId",
-          as: "resume",
+        {
+          $lookup: {
+            from: "users",
+            localField: "user",
+            foreignField: "_id",
+            as: "userData",
+          },
         },
-      },
-      {
-        $unwind: {
-          path: "$resume",
-          preserveNullAndEmptyArrays: true,
+        {
+          $unwind: {
+            path: "$userData",
+            preserveNullAndEmptyArrays: false, // Only return applications with users
+          },
         },
-      },
-      {
-        $match: this.buildSearchFilters(filters, "user", "resume"),
-      },
-      {
-        $facet: {
-          metadata: [{ $count: "total" }],
-          data: [
-            { $skip: skip },
-            { $limit: limit },
-            { $sort: { [sortBy]: sortOrder === "desc" ? -1 : 1 } },
-            {
-              $project: {
-                _id: 1,
-                userId: "$user._id",
-                name: "$user.name",
-                email: "$user.email",
-                phone: "$user.phone",
-                position: "$resume.desiredPosition",
-                status: 1,
-                experience: "$resume.experience",
-                skills: "$resume.skills",
-                location: "$user.location",
-                appliedDate: "$createdAt",
-                resume: {
-                  _id: "$resume._id",
-                  title: "$resume.title",
-                  template: "$resume.template",
-                  education: "$resume.education",
-                  certifications: "$resume.certifications",
-                  languages: "$resume.languages",
-                  projects: "$resume.projects",
+        {
+          $lookup: {
+            from: "resumes",
+            localField: "user",
+            foreignField: "user",
+            as: "resumeData",
+          },
+        },
+        {
+          $unwind: {
+            path: "$resumeData",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        // Apply search filters
+        ...(filters.search ? [this.buildSearchFilter(filters.search)] : []),
+        // Add status summary
+        {
+          $facet: {
+            metadata: [{ $count: "total" }],
+            data: [
+              { $skip: skip },
+              { $limit: limit },
+              { $sort: { [sortBy]: sortOrder === "desc" ? -1 : 1 } },
+              {
+                $project: {
+                  _id: 1,
+                  user: "$userData._id",
+                  name: {
+                    $concat: [
+                      { $ifNull: ["$userData.profile.firstName", ""] },
+                      " ",
+                      { $ifNull: ["$userData.profile.lastName", ""] },
+                    ],
+                  },
+                  email: "$userData.email",
+                  phone: "$userData.profile.phone",
+                  position: "$resumeData.desiredPosition",
+                  status: 1,
+                  experience: "$resumeData.experience",
+                  skills: "$resumeData.skills",
+                  location: "$userData.profile.location",
+                  appliedDate: "$createdAt",
+                  updatedAt: 1,
+                  resume: "$resumeData",
+                  aiScore: 1,
+                  aiStrengths: 1,
+                  aiWeaknesses: 1,
+                  notes: 1,
+                  job: 1,
+                  jobTitle: "$job.title",
                 },
-                score: 1,
-                notes: 1,
               },
-            },
-          ],
+            ],
+          },
         },
-      },
-    ];
+      ];
 
-    const result = await this.Application.aggregate(pipeline as any);
+      const result = await this.Application.aggregate(pipeline);
+      const candidates = result[0]?.data || [];
+      const total = result[0]?.metadata[0]?.total || 0;
 
-    const candidates = result[0]?.data || [];
-    const total = result[0]?.metadata[0]?.total || 0;
+      // Get status summary
+      const statusSummary = await this.getStatusSummary(jobIds, filters);
 
-    // Add candidate status summary
-    const statusSummary = await this.getStatusSummary(jobIds, filters);
-
-    return {
-      candidates,
-      total,
-      statusSummary,
-    };
+      return {
+        candidates,
+        total,
+        statusSummary,
+      };
+    } catch (error: any) {
+      console.error("Error in getCandidates:", error);
+      throw new Error(`Failed to get candidates: ${error.message}`);
+    }
   }
 
   /**
@@ -491,7 +467,7 @@ export class CandidateService {
    * Build search filters for MongoDB aggregation
    */
   private buildSearchFilters(
-    filters: FilterOptions,
+    filters: any,
     userAlias: string,
     resumeAlias: string,
   ): any {
@@ -850,23 +826,72 @@ export class CandidateService {
       .slice(0, 10);
   }
 
-  /**
-   * Get status summary
-   */
+  // Helper method for building search filter
+  private buildSearchFilter(search: string): any {
+    return {
+      $match: {
+        $or: [
+          { "userData.email": { $regex: search, $options: "i" } },
+          { "userData.profile.firstName": { $regex: search, $options: "i" } },
+          { "userData.profile.lastName": { $regex: search, $options: "i" } },
+          { "resumeData.desiredPosition": { $regex: search, $options: "i" } },
+          { "resumeData.skills.name": { $regex: search, $options: "i" } },
+        ],
+      },
+    };
+  }
+
+  // Get status summary
   private async getStatusSummary(
-    jobIds: Types.ObjectId[],
-    filters: FilterOptions,
+    jobIds: string[],
+    filters: any,
   ): Promise<any[]> {
-    const match: any = { jobId: { $in: jobIds } };
+    try {
+      const matchStage: any = {
+        job: { $in: jobIds },
+      };
 
-    if (filters.search || filters.skills || filters.location) {
-      // Add search filters logic here if needed
+      if (filters.status && filters.status !== "all") {
+        matchStage.status = filters.status;
+      }
+
+      const summary = await this.Application.aggregate([
+        {
+          $match: matchStage,
+        },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            status: "$_id",
+            count: 1,
+            _id: 0,
+          },
+        },
+        {
+          $sort: { count: -1 },
+        },
+      ]);
+
+      // Ensure all statuses are represented
+      const allStatuses = Object.values(ApplicationStatus);
+      const summaryMap = new Map();
+      summary.forEach((item: any) => {
+        summaryMap.set(item.status, item.count);
+      });
+
+      return allStatuses.map((status) => ({
+        status,
+        count: summaryMap.get(status) || 0,
+      }));
+    } catch (error) {
+      console.error("Error getting status summary:", error);
+      return [];
     }
-
-    return this.Application.aggregate([
-      { $match: match },
-      { $group: { _id: "$status", count: { $sum: 1 } } },
-    ]);
   }
 
   /**
@@ -948,400 +973,193 @@ export class CandidateService {
   }
 
   /**
-   * Get job applications
-   */
-  // backend/src/services/candidate.service.ts
-
-  async getJobApplications(
-    jobId: string,
-    employerId: string,
-    page: number,
-    limit: number,
-    status?: string,
-  ): Promise<{ applications: any[]; pagination: any }> {
-    try {
-      console.log(`📊 Fetching applications for job: ${jobId}`);
-      console.log(`👤 Employer ID: ${employerId}`);
-      console.log(`🔍 Query: { _id: ${jobId}, postedBy: ${employerId} }`);
-
-      // 1. First check if the job exists at all
-      const jobExists = await this.Job.findById(jobId);
-      console.log(`📊 Job exists in DB: ${!!jobExists}`);
-
-      if (jobExists) {
-        console.log(`📊 Job data:`, {
-          id: jobExists._id,
-          title: jobExists.title,
-          postedBy: jobExists.postedBy,
-          employerId: jobExists.employerId, // Check if this field exists
-          companyId: jobExists.companyId, // Check if this field exists
-          ownerId: jobExists.ownerId, // Check if this field exists
-        });
-
-        // Check if the employer ID matches any possible field
-        console.log(
-          `🔍 postedBy match: ${jobExists.postedBy?.toString() === employerId?.toString()}`,
-        );
-        console.log(
-          `🔍 employerId match: ${jobExists.employerId?.toString() === employerId?.toString()}`,
-        );
-        console.log(
-          `🔍 ownerId match: ${jobExists.ownerId?.toString() === employerId?.toString()}`,
-        );
-      }
-
-      // 2. Try different field combinations
-      let job = await this.Job.findOne({
-        _id: jobId,
-        postedBy: employerId,
-        isDeleted: { $ne: true },
-      });
-
-      // If not found, try with employerId field
-      if (!job) {
-        console.log(`🔍 Trying with employerId field...`);
-        job = await this.Job.findOne({
-          _id: jobId,
-          employerId: employerId,
-          isDeleted: { $ne: true },
-        });
-      }
-
-      // If still not found, try with ownerId field
-      if (!job) {
-        console.log(`🔍 Trying with ownerId field...`);
-        job = await this.Job.findOne({
-          _id: jobId,
-          ownerId: employerId,
-          isDeleted: { $ne: true },
-        });
-      }
-
-      if (!job) {
-        console.log(`❌ Job not found with any field`);
-        throw new AppError("Job not found or access denied", 404);
-      }
-
-      console.log(`✅ Job found: ${job.title}`);
-
-      // ... rest of the code remains the same ...
-
-      const match: any = { jobId };
-      if (status) {
-        match.status = status;
-      }
-
-      const skip = (page - 1) * limit;
-
-      const [applications, total] = await Promise.all([
-        this.Application.find(match)
-          .populate("userId", "name email phone")
-          .skip(skip)
-          .limit(limit)
-          .sort({ appliedAt: -1, createdAt: -1 }),
-        this.Application.countDocuments(match),
-      ]);
-
-      console.log(`✅ Found ${applications.length} applications`);
-
-      return {
-        applications,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
-      };
-    } catch (error) {
-      console.error("❌ Error fetching job applications:", error);
-      throw error;
-    }
-  }
-  /**
-   * Get job statistics
-   */
-  async getJobStats(jobId: string, employerId: string): Promise<any | null> {
-    const job = await this.Job.findOne({ _id: jobId, postedBy: employerId });
-    if (!job) {
-      return null;
-    }
-
-    const [totalApplications, byStatus] = await Promise.all([
-      this.Application.countDocuments({ jobId }),
-      this.Application.aggregate([
-        { $match: { jobId: new Types.ObjectId(jobId) } },
-        { $group: { _id: "$status", count: { $sum: 1 } } },
-      ]),
-    ]);
-
-    return {
-      totalApplications,
-      byStatus,
-      job: {
-        title: job.title,
-        status: job.status,
-        createdAt: job.createdAt,
-      },
-    };
-  }
-
-  /**
    * Get candidate statistics for employer dashboard
    */
   async getCandidateStats(employerId: string): Promise<any> {
-    try {
-      console.log(`📊 Fetching candidate stats for employer: ${employerId}`);
-
-      // 1. Get all jobs posted by this employer
-      const employerJobs = await this.Job.find({
-        $or: [
-          { postedBy: employerId },
-          { employerId: employerId },
-          { ownerId: employerId },
-        ],
-        isDeleted: { $ne: true },
-      }).select("_id title status");
-
-      const jobIds = employerJobs.map((job: any) => job._id);
-
-      console.log(`📊 Found ${employerJobs.length} jobs for employer`);
-
-      // If no jobs, return empty stats
-      if (jobIds.length === 0) {
-        return {
-          overview: {
-            totalCandidates: 0,
-            activeCandidates: 0,
-            conversionRate: 0,
-            avgDaysToHire: 0,
-          },
-          statusDistribution: {
-            pending: 0,
-            reviewing: 0,
-            shortlisted: 0,
-            rejected: 0,
-            hired: 0,
-          },
-          stageDistribution: {
-            screening: 0,
-            interview: 0,
-            technical: 0,
-            final: 0,
-            offer: 0,
-          },
-          candidatesByJob: [],
-          recentActivity: [],
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      // 2. Get all applications for these jobs
-      const applications = await this.Application.find({
-        jobId: { $in: jobIds },
-      });
-
-      console.log(`📊 Found ${applications.length} applications`);
-
-      // 3. Calculate status distribution
-      const statusDistribution = {
-        pending: applications.filter((a: any) => a.status === "pending").length,
-        reviewing: applications.filter((a: any) => a.status === "reviewing")
-          .length,
-        shortlisted: applications.filter((a: any) => a.status === "shortlisted")
-          .length,
-        rejected: applications.filter((a: any) => a.status === "rejected")
-          .length,
-        hired: applications.filter((a: any) => a.status === "hired").length,
-      };
-
-      // 4. Calculate stage distribution (if stage field exists)
-      const stageDistribution = {
-        screening: applications.filter((a: any) => a.stage === "screening")
-          .length,
-        interview: applications.filter((a: any) => a.stage === "interview")
-          .length,
-        technical: applications.filter((a: any) => a.stage === "technical")
-          .length,
-        final: applications.filter((a: any) => a.stage === "final").length,
-        offer: applications.filter((a: any) => a.stage === "offer").length,
-      };
-
-      // 5. Get candidates by job
-      const candidatesByJob = await this.Application.aggregate([
-        {
-          $match: { jobId: { $in: jobIds } },
-        },
-        {
-          $group: {
-            _id: "$jobId",
-            count: { $sum: 1 },
-          },
-        },
-        {
-          $lookup: {
-            from: "jobs",
-            localField: "_id",
-            foreignField: "_id",
-            as: "job",
-          },
-        },
-        {
-          $unwind: {
-            path: "$job",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $project: {
-            jobTitle: "$job.title",
-            jobId: "$_id",
-            count: 1,
-          },
-        },
-        {
-          $sort: { count: -1 },
-        },
-      ]);
-
-      // 6. Get recent activity (last 5 updated applications)
-      const recentActivity = await this.Application.find({
-        jobId: { $in: jobIds },
-      })
-        .sort({ updatedAt: -1 })
-        .limit(5)
-        .populate("userId", "name email")
-        .populate("jobId", "title")
-        .select("_id userId jobId status stage updatedAt createdAt");
-
-      // 7. Calculate conversion rate
-      const totalCandidates = applications.length;
-      const hiredCount = statusDistribution.hired;
-      const conversionRate =
-        totalCandidates > 0
-          ? parseFloat(((hiredCount / totalCandidates) * 100).toFixed(1))
-          : 0;
-
-      // 8. Calculate average days to hire
-      const hiredApplications = applications.filter(
-        (a: any) => a.status === "hired",
-      );
-      let avgDaysToHire = 0;
-
-      if (hiredApplications.length > 0) {
-        const totalDays = hiredApplications.reduce((sum: number, app: any) => {
-          const hiredDate = app.hiredAt || app.updatedAt;
-          const appliedDate = app.appliedAt || app.createdAt;
-          const days = Math.ceil(
-            (new Date(hiredDate).getTime() - new Date(appliedDate).getTime()) /
-              (1000 * 60 * 60 * 24),
-          );
-          return sum + days;
-        }, 0);
-        avgDaysToHire = Math.round(totalDays / hiredApplications.length);
-      }
-
-      // 9. Calculate active candidates (not rejected or hired)
-      const activeCandidates =
-        totalCandidates -
-        statusDistribution.rejected -
-        statusDistribution.hired;
-
-      // 10. Get pending screening count
-      const pendingScreening = applications.filter(
-        (a: any) => a.status === "pending" && (!a.aiScore || a.aiScore === 0),
-      ).length;
-
-      // 11. Get AI screening coverage
-      const screenedCount = applications.filter(
-        (a: any) => a.aiScore && a.aiScore > 0,
-      ).length;
-      const screeningCoverage =
-        totalCandidates > 0
-          ? parseFloat(((screenedCount / totalCandidates) * 100).toFixed(1))
-          : 0;
-
-      // 12. Get average AI score
-      const applicationsWithScore = applications.filter(
-        (a: any) => a.aiScore && a.aiScore > 0,
-      );
-      const avgAiScore =
-        applicationsWithScore.length > 0
-          ? parseFloat(
-              (
-                applicationsWithScore.reduce(
-                  (sum: number, a: any) => sum + a.aiScore,
-                  0,
-                ) / applicationsWithScore.length
-              ).toFixed(1),
-            )
-          : 0;
-
-      // 13. Get status history for timeline
-      const statusHistory = await this.Application.aggregate([
-        {
-          $match: { jobId: { $in: jobIds } },
-        },
-        {
-          $group: {
-            _id: {
-              date: {
-                $dateToString: { format: "%Y-%m-%d", date: "$updatedAt" },
-              },
-              status: "$status",
-            },
-            count: { $sum: 1 },
-          },
-        },
-        {
-          $group: {
-            _id: "$_id.date",
-            statuses: {
-              $push: {
-                status: "$_id.status",
-                count: "$count",
-              },
-            },
-          },
-        },
-        {
-          $sort: { _id: 1 },
-        },
-        {
-          $limit: 30,
-        },
-      ]);
-
-      return {
-        overview: {
-          totalCandidates,
-          activeCandidates,
-          conversionRate,
-          avgDaysToHire,
-          pendingScreening,
-          screeningCoverage,
-          avgAiScore,
-        },
-        statusDistribution,
-        stageDistribution,
-        candidatesByJob,
-        recentActivity: recentActivity.map((app: any) => ({
-          id: app._id,
-          candidateName: app.userId?.name || "Unknown",
-          candidateEmail: app.userId?.email || "Unknown",
-          jobTitle: app.jobId?.title || "N/A",
-          status: app.status,
-          stage: app.stage,
-          updatedAt: app.updatedAt,
-          createdAt: app.createdAt,
-        })),
-        statusHistory,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      console.error("❌ Error in CandidateService.getCandidateStats:", error);
-      throw error;
+    // Validate employer ID
+    if (!mongoose.Types.ObjectId.isValid(employerId)) {
+      throw new Error("Invalid employer ID format");
     }
+
+    // Get all jobs for this employer
+    const jobs = await jobService.getJobsByEmployer(employerId, {
+      limit: 10,
+      page: 0,
+    });
+    const jobIds = jobs.map((job: any) => job._id);
+
+    if (jobIds.length === 0) {
+      return this.getEmptyCandidateStats();
+    }
+
+    // Get all applications for these jobs
+    const applications = await this.Application.find({
+      job: { $in: jobIds },
+    })
+      .populate("user", "name email profile")
+      .populate("job", "title");
+
+    // Status distribution
+    const statusDistribution = {
+      pending: applications.filter(
+        (a: any) => a.status === ApplicationStatus.PENDING,
+      ).length,
+      reviewing: applications.filter(
+        (a: any) => a.status === ApplicationStatus.REVIEWING,
+      ).length,
+      shortlisted: applications.filter(
+        (a: any) => a.status === ApplicationStatus.SHORTLISTED,
+      ).length,
+      interviewing: applications.filter(
+        (a: any) => a.status === ApplicationStatus.INTERVIEWING,
+      ).length,
+      rejected: applications.filter(
+        (a: any) => a.status === ApplicationStatus.REJECTED,
+      ).length,
+      hired: applications.filter(
+        (a: any) => a.status === ApplicationStatus.HIRED,
+      ).length,
+      withdrawn: applications.filter(
+        (a: any) => a.status === ApplicationStatus.WITHDRAWN,
+      ).length,
+    };
+
+    const totalCandidates = applications.length;
+    const hiredCount = statusDistribution.hired;
+    const rejectedCount = statusDistribution.rejected;
+    const withdrawnCount = statusDistribution.withdrawn;
+
+    // Calculate conversion rate (hired / total)
+    const conversionRate =
+      totalCandidates > 0
+        ? parseFloat(((hiredCount / totalCandidates) * 100).toFixed(1))
+        : 0;
+
+    // Active candidates = total - rejected - hired - withdrawn
+    const activeCandidates =
+      totalCandidates - rejectedCount - hiredCount - withdrawnCount;
+
+    // Screening coverage
+    const screenedCount = applications.filter(
+      (a: any) => a.aiScore && a.aiScore > 0,
+    ).length;
+    const screeningCoverage =
+      totalCandidates > 0
+        ? parseFloat(((screenedCount / totalCandidates) * 100).toFixed(1))
+        : 0;
+
+    // Average AI score
+    const applicationsWithScore = applications.filter(
+      (a: any) => a.aiScore && a.aiScore > 0,
+    );
+    const avgAiScore =
+      applicationsWithScore.length > 0
+        ? parseFloat(
+            (
+              applicationsWithScore.reduce(
+                (sum: number, a: any) => sum + a.aiScore,
+                0,
+              ) / applicationsWithScore.length
+            ).toFixed(1),
+          )
+        : 0;
+
+    // Candidates by job - FIXED: Use correct field name 'job' instead of 'jobId'
+    const candidatesByJob = await this.Application.aggregate([
+      {
+        $match: {
+          job: { $in: jobIds },
+        },
+      },
+      {
+        $group: {
+          _id: "$job",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $lookup: {
+          from: "jobs",
+          localField: "_id",
+          foreignField: "_id",
+          as: "jobData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$jobData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $project: {
+          jobTitle: "$jobData.title",
+          jobId: "$_id",
+          count: 1,
+        },
+      },
+      {
+        $sort: { count: -1 },
+      },
+    ]);
+
+    // Recent activity - FIXED: Use correct field names
+    const recentActivity = await this.Application.find({
+      job: { $in: jobIds },
+    })
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .populate("user", "name email profile")
+      .populate("job", "title");
+
+    // Calculate average time to hire
+    const hiredApplications = applications.filter(
+      (a: any) =>
+        a.status === ApplicationStatus.HIRED && a.createdAt && a.updatedAt,
+    );
+    let averageTimeToHire = 0;
+    if (hiredApplications.length > 0) {
+      const totalDays = hiredApplications.reduce((sum: number, app: any) => {
+        const days = (app.updatedAt - app.createdAt) / (1000 * 60 * 60 * 24);
+        return sum + days;
+      }, 0);
+      averageTimeToHire = parseFloat(
+        (totalDays / hiredApplications.length).toFixed(1),
+      );
+    }
+
+    return {
+      overview: {
+        totalCandidates,
+        activeCandidates,
+        conversionRate,
+        pendingScreening: applications.filter(
+          (a: any) =>
+            a.status === ApplicationStatus.PENDING &&
+            (!a.aiScore || a.aiScore === 0),
+        ).length,
+        screeningCoverage,
+        avgAiScore,
+        averageTimeToHire,
+      },
+      statusDistribution,
+      candidatesByJob: candidatesByJob.map((item: any) => ({
+        jobTitle: item.jobTitle || "Unknown Job",
+        jobId: item.jobId,
+        count: item.count,
+      })),
+      recentActivity: recentActivity.map((app: any) => ({
+        id: app._id,
+        candidateName:
+          app.user?.name || app.user?.profile?.firstName || "Unknown",
+        candidateEmail: app.user?.email || "",
+        jobTitle: app.job?.title || "N/A",
+        status: app.status,
+        updatedAt: app.updatedAt,
+        appliedAt: app.createdAt,
+      })),
+      timestamp: new Date().toISOString(),
+    };
   }
 
   /**
@@ -2189,6 +2007,32 @@ export class CandidateService {
       );
       throw error;
     }
+  }
+
+  private getEmptyCandidateStats(): any {
+    return {
+      overview: {
+        totalCandidates: 0,
+        activeCandidates: 0,
+        conversionRate: 0,
+        pendingScreening: 0,
+        screeningCoverage: 0,
+        avgAiScore: 0,
+        averageTimeToHire: 0,
+      },
+      statusDistribution: {
+        pending: 0,
+        reviewing: 0,
+        shortlisted: 0,
+        interviewing: 0,
+        rejected: 0,
+        hired: 0,
+        withdrawn: 0,
+      },
+      candidatesByJob: [],
+      recentActivity: [],
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 

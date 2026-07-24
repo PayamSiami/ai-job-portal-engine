@@ -4,8 +4,8 @@ import express, { Request, Response, Router } from "express";
 import {
   validateRegistration,
   validateLogin,
-} from "../middleware/validationMiddleware.js";
-import authService from "../services/authService.js";
+} from "../middleware/validation.middleware.js";
+import authService from "../services/auth.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { getUserId } from "../utils/routeHelpers.js";
 

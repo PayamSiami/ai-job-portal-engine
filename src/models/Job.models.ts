@@ -17,8 +17,7 @@ export type WorkMode = (typeof WORK_MODES)[number];
 
 export interface IJob extends Document {
   title: string;
-  company: string;
-  companyId: mongoose.Types.ObjectId;
+  company: mongoose.Types.ObjectId;
   postedBy: mongoose.Types.ObjectId;
   location: string;
   description: string;
@@ -51,11 +50,6 @@ const jobSchema = new Schema<IJob>(
       index: true,
     },
     company: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    companyId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
@@ -77,7 +71,7 @@ const jobSchema = new Schema<IJob>(
       required: true,
     },
     requirements: {
-      type: String, 
+      type: String,
       required: true,
     },
     responsibilities: {
@@ -148,12 +142,14 @@ const jobSchema = new Schema<IJob>(
   },
   {
     timestamps: true,
+    toJSON: { versionKey: false },
+    toObject: { versionKey: false },
   },
 );
 
 // Indexes
 jobSchema.index({ title: "text", description: "text" });
-jobSchema.index({ companyId: 1, isActive: 1 });
+jobSchema.index({ company: 1, isActive: 1 });
 jobSchema.index({ postedBy: 1, isActive: 1 });
 jobSchema.index({ jobType: 1 });
 jobSchema.index({ experienceLevel: 1 });

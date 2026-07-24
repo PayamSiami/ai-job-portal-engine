@@ -5,12 +5,34 @@ import Application, {
 } from "../models/Application.model.js";
 import Job from "../models/Job.models.js";
 import Resume from "../models/Resume.models.js";
+import {
+  Interview,
+  InterviewStatus,
+  InterviewType,
+} from "../models/Interview.model.js";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger.js";
-import User from "../models/User.models.js";
 import { AppError } from "../utils/errorHandler.js";
+import Company from "../models/Company.models.js";
+import jobService from "./job.service.js";
 
 // ============ Type Definitions ============
+
+export interface ApplicationStats {
+  total: number;
+  pending: number;
+  reviewing: number;
+  shortlisted: number;
+  interviewing: number;
+  rejected: number;
+  hired: number;
+  averageAIScore: number;
+  screeningCoverage: number;
+  statusBreakdown: Record<string, number>;
+  recentActivity: Array<{ date: string; count: number }>;
+  applicationsByJob: Array<{ jobTitle: string; count: number }>;
+  averageTimeToHire: number;
+}
 
 export interface CreateApplicationData {
   jobId: string;
@@ -67,6 +89,18 @@ export interface ApplicationStatistics {
   recentApplications: number;
 }
 
+export interface InterviewScheduleData {
+  scheduledDate: Date;
+  duration?: number;
+  type?: string;
+  location?: string;
+  meetingLink?: string;
+  interviewerIds?: string[];
+  title?: string;
+  timezone?: string;
+  notes?: string;
+}
+
 // ============ Service Class ============
 
 class ApplicationService {
@@ -90,9 +124,9 @@ class ApplicationService {
 
       // Create the application
       const application = new Application({
-        jobId: new Types.ObjectId(data.jobId),
-        userId: new Types.ObjectId(data.userId),
-        resumeId: new Types.ObjectId(data.resumeId),
+        job: new Types.ObjectId(data.jobId),
+        user: new Types.ObjectId(data.userId),
+        resume: new Types.ObjectId(data.resumeId),
         coverLetter: data.coverLetter,
         expectedSalary: data.expectedSalary,
         availableFrom: data.availableFrom,
@@ -114,8 +148,6 @@ class ApplicationService {
       throw error;
     }
   }
-
-  // src/services/applicationService.ts
 
   /**
    * Get application by ID with full population
@@ -139,22 +171,24 @@ class ApplicationService {
       if (options.populate !== false) {
         query = query
           .populate({
-            path: "jobId",
+            path: "job",
             select:
               "title company location description requirements minSalary maxSalary workMode jobType isActive status skills postedBy",
           })
           .populate({
-            path: "userId",
+            path: "user",
             select: "-password -__v",
           })
           .populate({
-            path: "resumeId",
+            path: "resume",
             select:
               "title personalInfo skills experience education projects certifications languages status template visibility",
+          })
+          .populate({
+            path: "interview",
           });
       }
 
-      // ✅ Remove .lean() to keep Mongoose document methods
       const application = await query.exec();
 
       if (!application) {
@@ -162,12 +196,9 @@ class ApplicationService {
         return null;
       }
 
-      // ✅ Convert to object and handle nested population
       const result = application.toObject
         ? application.toObject()
         : application;
-
-      console.log(result);
       return result as IApplication;
     } catch (error) {
       if (error instanceof mongoose.Error.CastError) {
@@ -209,11 +240,11 @@ class ApplicationService {
       }
 
       if (filters.jobId) {
-        query.jobId = filters.jobId;
+        query.job = filters.jobId;
       }
 
       if (filters.userId) {
-        query.userId = filters.userId;
+        query.user = filters.userId;
       }
 
       if (filters.minScore !== undefined || filters.maxScore !== undefined) {
@@ -241,9 +272,10 @@ class ApplicationService {
 
       const [applications, total] = await Promise.all([
         Application.find(query)
-          .populate("jobId")
-          .populate("userId", "-password")
-          .populate("resumeId")
+          .populate("job")
+          .populate("user", "-password")
+          .populate("resume")
+          .populate("interview")
           .sort(sort)
           .skip(skip)
           .limit(limit)
@@ -340,8 +372,8 @@ class ApplicationService {
   ): Promise<IApplication | null> {
     try {
       return await Application.findOne({
-        jobId: new Types.ObjectId(jobId),
-        userId: new Types.ObjectId(userId),
+        job: new Types.ObjectId(jobId),
+        user: new Types.ObjectId(userId),
       }).exec();
     } catch (error) {
       logger.error("Failed to find application by job and candidate", {
@@ -388,17 +420,23 @@ class ApplicationService {
     }
   }
 
+  // src/services/applicationService.ts
+
   /**
-   * Update application status with history tracking
+   * Update application status with interview scheduling
    */
   async updateApplicationStatus(
     applicationId: string,
     status: ApplicationStatus,
     notes?: string,
     userId?: string,
+    interviewData?: InterviewScheduleData,
   ): Promise<IApplication | null> {
-    // ✅ Find the application
-    const application = await Application.findById(applicationId);
+    // ✅ Find the application with populated fields
+    const application = await Application.findById(applicationId)
+      .populate("jobId", "title companyName company")
+      .populate("userId", "name email");
+
     if (!application) {
       throw new AppError("Application not found", 404);
     }
@@ -411,7 +449,7 @@ class ApplicationService {
       status: status,
       notes: notes || "",
       updatedAt: new Date(),
-      updatedBy: userId ? new Types.ObjectId(userId) : application.userId,
+      updatedBy: userId ? new Types.ObjectId(userId) : application.user,
     };
 
     // ✅ Update application
@@ -441,6 +479,62 @@ class ApplicationService {
       updateData.notes = notes;
     }
 
+    // ✅ Create interview if status is INTERVIEWING
+    if (status === ApplicationStatus.INTERVIEWING && interviewData) {
+      // Validate interview data
+      if (!interviewData.scheduledDate) {
+        throw new AppError("Scheduled date is required for interview", 400);
+      }
+
+      // Validate that scheduled date is in the future
+      const scheduledDate = new Date(interviewData.scheduledDate);
+      if (scheduledDate < new Date()) {
+        throw new AppError("Interview date must be in the future", 400);
+      }
+
+      // Check if interview already exists for this application
+      const existingInterview = await Interview.findOne({
+        applicationId: applicationId,
+        status: { $in: [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED] },
+      });
+
+      if (existingInterview) {
+        throw new AppError(
+          "An interview is already scheduled for this application",
+          400,
+        );
+      }
+
+      // Get company ID from job
+      const job = await Job.findById(application.job);
+      const company = job?.company || null;
+
+      // Create interview
+      const interview = new Interview({
+        applicationId: application._id,
+        job: application.job,
+        company: company,
+        candidate: application.user,
+        interviewerIds: interviewData.interviewerIds || [userId],
+        title:
+          interviewData.title ||
+          `Interview for ${(application.job as any)?.title || "Position"}`,
+        type: interviewData.type || InterviewType.VIDEO,
+        status: InterviewStatus.SCHEDULED,
+        scheduledDate: scheduledDate,
+        duration: interviewData.duration || 60,
+        location: interviewData.location,
+        meetingLink: interviewData.meetingLink,
+        timezone: interviewData.timezone || "UTC",
+        notes: notes || "",
+      });
+
+      await interview.save();
+
+      // ✅ Add interview reference to updateData
+      updateData.interviewId = interview._id;
+    }
+
     // ✅ Update the application
     const updatedApplication = await Application.findByIdAndUpdate(
       applicationId,
@@ -448,7 +542,37 @@ class ApplicationService {
       { new: true, runValidators: true },
     );
 
+    // ✅ Populate interview if exists
+    if (updatedApplication?.interview) {
+      await updatedApplication.populate("interviewId");
+    }
+
+    // ✅ Log status change
+    logger.info("Application status updated", {
+      applicationId,
+      oldStatus: application.status,
+      newStatus: status,
+      userId,
+    });
+
     return updatedApplication;
+  }
+
+  /**
+   * ✅ NEW: Schedule interview for application
+   */
+  async scheduleInterview(
+    applicationId: string,
+    interviewData: InterviewScheduleData,
+    userId: string,
+  ): Promise<IApplication> {
+    return this.updateApplicationStatus(
+      applicationId,
+      ApplicationStatus.INTERVIEWING,
+      interviewData.notes || "Interview scheduled",
+      userId,
+      interviewData,
+    ) as Promise<IApplication>;
   }
 
   /**
@@ -466,7 +590,7 @@ class ApplicationService {
     }
 
     // ✅ Verify ownership
-    if (application.userId.toString() !== userId) {
+    if (application.user.toString() !== userId) {
       throw new AppError("You can only withdraw your own applications", 403);
     }
 
@@ -507,7 +631,7 @@ class ApplicationService {
     const application = await Application.findById(applicationId);
 
     if (!application) return false;
-    if (application.userId.toString() !== userId) return false;
+    if (application.user.toString() !== userId) return false;
 
     const nonWithdrawableStatuses = [
       ApplicationStatus.HIRED,
@@ -580,6 +704,7 @@ class ApplicationService {
       })
         .populate("userId", "-password")
         .populate("resumeId")
+        .populate("interviewId")
         .sort({ aiScore: -1 })
         .limit(limit)
         .exec();
@@ -666,8 +791,255 @@ class ApplicationService {
     }
   }
 
-  // ============ Private Helper Methods ============
+  async getApplicationTimeline(
+    employerId: string,
+    days: number = 30,
+    status?: string,
+  ): Promise<any[]> {
+    const company = await Company.findOne({ ownerId: employerId });
+    if (!company) {
+      throw new AppError("Company not found", 404);
+    }
 
+    const jobs = await Job.find({ company: company._id });
+    const jobIds = jobs.map((job: any) => job._id);
+
+    if (jobIds.length === 0) {
+      return [];
+    }
+
+    const matchStage: any = {
+      jobId: { $in: jobIds },
+      createdAt: {
+        $gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000),
+      },
+    };
+
+    if (status) {
+      matchStage.status = status;
+    }
+
+    const timeline = await Application.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+          },
+          count: { $sum: 1 },
+          applications: {
+            $push: {
+              id: "$_id",
+              status: "$status",
+              aiScore: "$aiScore",
+            },
+          },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ] as any);
+
+    return timeline.map((item: any) => ({
+      date: item._id,
+      count: item.count,
+      applications: item.applications.slice(0, 10), // Limit details
+    }));
+  }
+
+  async getApplicationStats(employerId: string): Promise<ApplicationStats> {
+    // Validate employer ID
+    if (!mongoose.Types.ObjectId.isValid(employerId)) {
+      throw new Error("Invalid employer ID format");
+    }
+
+    // Get all jobs for this employer
+    const jobs = await jobService.getJobsByEmployer(employerId, {
+      page: 0,
+      limit: 10,
+    });
+    const jobIds = jobs.map((job: any) => job._id);
+
+    if (jobIds.length === 0) {
+      return this.getEmptyApplicationStats();
+    }
+
+    // Type the pipeline as any[] to avoid TypeScript issues
+    const pipeline: any[] = [
+      {
+        $match: {
+          job: { $in: jobIds },
+        },
+      },
+      {
+        $facet: {
+          statusCounts: [
+            {
+              $group: {
+                _id: "$status",
+                count: { $sum: 1 },
+              },
+            },
+          ],
+          aiStats: [
+            {
+              $match: {
+                aiScore: { $exists: true, $ne: null },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                averageAIScore: { $avg: "$aiScore" },
+                totalScreened: { $sum: 1 },
+              },
+            },
+          ],
+          applicationsByJob: [
+            {
+              $lookup: {
+                from: "jobs",
+                localField: "job",
+                foreignField: "_id",
+                as: "jobData",
+              },
+            },
+            {
+              $unwind: {
+                path: "$jobData",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $group: {
+                _id: "$jobData.title",
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $sort: { count: -1 },
+            },
+            {
+              $limit: 10,
+            },
+          ],
+          recentActivity: [
+            {
+              $match: {
+                createdAt: {
+                  $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+                },
+              },
+            },
+            {
+              $group: {
+                _id: {
+                  $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+                },
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $sort: { _id: 1 },
+            },
+          ],
+          hiredApplications: [
+            {
+              $match: {
+                status: ApplicationStatus.HIRED,
+                createdAt: { $exists: true },
+                updatedAt: { $exists: true },
+              },
+            },
+            {
+              $project: {
+                timeToHire: {
+                  $subtract: ["$updatedAt", "$createdAt"],
+                },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = await Application.aggregate(pipeline);
+    const data = result[0] || {};
+
+    // Process status counts
+    const statusCounts: Record<string, number> = {};
+    (data.statusCounts || []).forEach((item: any) => {
+      statusCounts[item._id] = item.count;
+    });
+
+    // Process AI stats
+    const aiStats = data.aiStats?.[0] || {
+      averageAIScore: 0,
+      totalScreened: 0,
+    };
+
+    // Calculate total applications
+    const totalApplications = Object.values(statusCounts).reduce(
+      (sum: number, count: number) => sum + count,
+      0,
+    );
+
+    // Calculate screening coverage
+    const screeningCoverage =
+      totalApplications > 0
+        ? (aiStats.totalScreened / totalApplications) * 100
+        : 0;
+
+    // Calculate average time to hire
+    let averageTimeToHire = 0;
+    if (data.hiredApplications && data.hiredApplications.length > 0) {
+      const totalDays = data.hiredApplications.reduce(
+        (sum: number, app: any) => {
+          const days = app.timeToHire / (1000 * 60 * 60 * 24);
+          return sum + days;
+        },
+        0,
+      );
+      averageTimeToHire = totalDays / data.hiredApplications.length;
+    }
+
+    return {
+      total: totalApplications,
+      pending: statusCounts[ApplicationStatus.PENDING] || 0,
+      reviewing: statusCounts[ApplicationStatus.REVIEWING] || 0,
+      shortlisted: statusCounts[ApplicationStatus.SHORTLISTED] || 0,
+      interviewing: statusCounts[ApplicationStatus.INTERVIEWING] || 0,
+      rejected: statusCounts[ApplicationStatus.REJECTED] || 0,
+      hired: statusCounts[ApplicationStatus.HIRED] || 0,
+      averageAIScore: Math.round((aiStats.averageAIScore || 0) * 100) / 100,
+      screeningCoverage: Math.round(screeningCoverage * 100) / 100,
+      statusBreakdown: {
+        [ApplicationStatus.PENDING]:
+          statusCounts[ApplicationStatus.PENDING] || 0,
+        [ApplicationStatus.REVIEWING]:
+          statusCounts[ApplicationStatus.REVIEWING] || 0,
+        [ApplicationStatus.SHORTLISTED]:
+          statusCounts[ApplicationStatus.SHORTLISTED] || 0,
+        [ApplicationStatus.INTERVIEWING]:
+          statusCounts[ApplicationStatus.INTERVIEWING] || 0,
+        [ApplicationStatus.HIRED]: statusCounts[ApplicationStatus.HIRED] || 0,
+        [ApplicationStatus.REJECTED]:
+          statusCounts[ApplicationStatus.REJECTED] || 0,
+        [ApplicationStatus.WITHDRAWN]:
+          statusCounts[ApplicationStatus.WITHDRAWN] || 0,
+      },
+      recentActivity: (data.recentActivity || []).map((item: any) => ({
+        date: item._id,
+        count: item.count,
+      })),
+      applicationsByJob: (data.applicationsByJob || []).map((item: any) => ({
+        jobTitle: item._id || "Unknown",
+        count: item.count,
+      })),
+      averageTimeToHire: Math.round(averageTimeToHire * 100) / 100,
+    };
+  }
+
+  // ============ Private Helper Methods ============
   /**
    * Validate status transition
    */
@@ -702,30 +1074,91 @@ class ApplicationService {
       [ApplicationStatus.WITHDRAWN]: [], // Terminal state - no transitions
     };
 
-    // ✅ Check if transition is valid
+    // ✅ If status is the same, it's valid (no change)
+    if (currentStatus === newStatus) {
+      return;
+    }
+
+    // ✅ Check if the transition is allowed
     const allowedTransitions = validTransitions[currentStatus] || [];
-    if (
-      !allowedTransitions.includes(newStatus) &&
-      currentStatus !== newStatus
-    ) {
+    if (!allowedTransitions.includes(newStatus)) {
       throw new AppError(
-        `Invalid status transition from ${currentStatus} to ${newStatus}`,
+        `Invalid status transition from ${currentStatus} to ${newStatus}. ` +
+          `Allowed transitions: ${allowedTransitions.join(", ") || "none"}`,
         400,
       );
     }
 
-    // ✅ Prevent re-applying after withdrawal
-    if (currentStatus === ApplicationStatus.WITHDRAWN) {
-      throw new AppError("Cannot update a withdrawn application", 400);
+    // ✅ Terminal states cannot transition to anything
+    const terminalStatuses = [
+      ApplicationStatus.HIRED,
+      ApplicationStatus.REJECTED,
+      ApplicationStatus.WITHDRAWN,
+    ];
+
+    if (terminalStatuses.includes(currentStatus)) {
+      throw new AppError(
+        `Cannot transition from terminal status: ${currentStatus}`,
+        400,
+      );
     }
 
-    // ✅ Prevent updating terminal states
-    if (
-      currentStatus === ApplicationStatus.HIRED ||
-      currentStatus === ApplicationStatus.REJECTED
-    ) {
-      throw new AppError("Cannot update a terminated application", 400);
+    // ✅ Prevent hiring without interviewing (unless already shortlisted)
+    if (newStatus === ApplicationStatus.HIRED) {
+      const canBeHired = [
+        ApplicationStatus.INTERVIEWING,
+        ApplicationStatus.SHORTLISTED,
+      ];
+      if (!canBeHired.includes(currentStatus)) {
+        throw new AppError(
+          `Cannot hire a candidate from ${currentStatus}. ` +
+            `Must be ${canBeHired.join(" or ")} first.`,
+          400,
+        );
+      }
     }
+
+    // ✅ Prevent rejecting already hired candidates
+    if (
+      newStatus === ApplicationStatus.REJECTED &&
+      currentStatus === ApplicationStatus.HIRED
+    ) {
+      throw new AppError("Cannot reject a hired candidate", 400);
+    }
+
+    // ✅ Prevent withdrawing after hiring
+    if (
+      newStatus === ApplicationStatus.WITHDRAWN &&
+      currentStatus === ApplicationStatus.HIRED
+    ) {
+      throw new AppError("Cannot withdraw a hired application", 400);
+    }
+  }
+
+  private getEmptyApplicationStats(): ApplicationStats {
+    return {
+      total: 0,
+      pending: 0,
+      reviewing: 0,
+      shortlisted: 0,
+      interviewing: 0,
+      rejected: 0,
+      hired: 0,
+      averageAIScore: 0,
+      screeningCoverage: 0,
+      statusBreakdown: {
+        [ApplicationStatus.PENDING]: 0,
+        [ApplicationStatus.REVIEWING]: 0,
+        [ApplicationStatus.SHORTLISTED]: 0,
+        [ApplicationStatus.INTERVIEWING]: 0,
+        [ApplicationStatus.HIRED]: 0,
+        [ApplicationStatus.REJECTED]: 0,
+        [ApplicationStatus.WITHDRAWN]: 0,
+      },
+      recentActivity: [],
+      applicationsByJob: [],
+      averageTimeToHire: 0,
+    };
   }
 }
 
