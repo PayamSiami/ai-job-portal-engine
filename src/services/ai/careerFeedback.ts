@@ -444,6 +444,13 @@ class CareerFeedbackService {
       missingSkills: [],
       targetRoles: [],
       overallScore: 50,
+      // ✅ Add these required fields
+      strengths: [],
+      recommendations: {
+        immediate: [],
+        shortTerm: [],
+        longTerm: [],
+      },
     };
 
     // Try to find score
@@ -480,6 +487,46 @@ class CareerFeedbackService {
             .replace(/^(?:improvement|suggestion|recommend)[:\s]*/i, "")
             .trim(),
         );
+    }
+
+    // ✅ Try to extract strengths
+    const strengthMatches = text.match(
+      /(?:strength|strong point|good)[:\s]*([^.\n]+)/gi,
+    );
+    if (strengthMatches) {
+      result.strengths = strengthMatches.slice(0, 5).map((item) => ({
+        type: "skills",
+        description: item
+          .replace(/^(?:strength|strong point|good)[:\s]*/i, "")
+          .trim(),
+        impact: "medium",
+      }));
+    }
+
+    // ✅ Try to extract missing skills
+    const skillMatches = text.match(
+      /(?:missing skill|skill gap|need.*skill)[:\s]*([^.\n]+)/gi,
+    );
+    if (skillMatches) {
+      result.missingSkills = skillMatches
+        .slice(0, 5)
+        .map((item) =>
+          item
+            .replace(/^(?:missing skill|skill gap|need.*skill)[:\s]*/i, "")
+            .trim(),
+        );
+    }
+
+    // ✅ Build recommendations if not found
+    if (result.improvements.length > 0) {
+      result.recommendations = {
+        immediate: result.improvements.slice(0, 3),
+        shortTerm: result.improvements.slice(3, 5),
+        longTerm: [
+          "Continue developing skills",
+          "Build your professional network",
+        ],
+      };
     }
 
     // If no data extracted, create default feedback
