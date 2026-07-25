@@ -1,4 +1,4 @@
-name: Deploy to VPS
+name: Deploy to VPS (Debug)
 
 on:
   push:
@@ -27,7 +27,8 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Debug - Test SSH connection
+      # Step 1: Just test SSH connection
+      - name: 1. Test SSH Connection
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -35,86 +36,129 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           script: |
-            echo "✅ SSH connection successful!"
+            echo "SSH Test: $(date)"
             echo "User: $(whoami)"
-            echo "Home: $(pwd)"
-            echo "Directory contents:"
-            ls -la /var/www/
-        continue-on-error: true
-        id: ssh_test
+            echo "Hostname: $(hostname)"
 
-      - name: Debug - Show SSH error
-        if: steps.ssh_test.outcome == 'failure'
-        run: |
-          echo "❌ SSH failed! Checking secrets..."
-          echo "Host: ${{ secrets.VPS_HOST }}"
-          echo "User: ${{ secrets.VPS_USER }}"
-          echo "Key length: $(echo -n '${{ secrets.VPS_SSH_KEY }}' | wc -c) characters"
-
-      - name: Deploy to VPS
-        if: steps.ssh_test.outcome == 'success'
+      # Step 2: Check if directory exists
+      - name: 2. Check App Directory
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
-          script_stop: true
           script: |
-            echo "=== STARTING DEPLOYMENT ==="
-            echo "Current user: $(whoami)"
-            echo "Current directory: $(pwd)"
-            
-            # Check if app directory exists
             if [ -d "/var/www/ai-job-backend" ]; then
-              echo "✅ App directory exists"
-              cd /var/www/ai-job-backend
-              echo "Current directory: $(pwd)"
-              echo "Directory contents:"
-              ls -la
+              echo "✅ Directory exists"
+              ls -la /var/www/ai-job-backend
             else
-              echo "❌ App directory /var/www/ai-job-backend does NOT exist!"
+              echo "❌ Directory does NOT exist"
               echo "Creating directory..."
-              mkdir -p /var/www/ai-job-backend
-              cd /var/www/ai-job-backend
-              echo "Directory created. Cloning repo..."
-              git clone git@github.com:yourusername/your-repo.git .
+              sudo mkdir -p /var/www/ai-job-backend
+              sudo chown -R $USER:$USER /var/www/ai-job-backend
             fi
+
+      # Step 3: Check git deploy key
+      - name: 3. Check Deploy Key
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            echo "Checking deploy key..."
+            ls -la ~/.ssh/
+            echo "Testing GitHub connection..."
+            ssh -T git@github.com -i ~/.ssh/github_deploy_key -o StrictHostKeyChecking=no || echo "Deploy key test done"
+
+      # Step 4: Clone or Pull
+      - name: 4. Clone/Pull Repository
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/ai-job-backend
+            export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
             
-            echo "=== PULLING LATEST CODE ==="
-            export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_deploy_key -o IdentitiesOnly=yes"
-            
-            # Check if git is initialized
             if [ -d ".git" ]; then
-              echo "Git repository exists, pulling..."
+              echo "Pulling latest code..."
               git pull origin main
             else
-              echo "No git repository, cloning..."
+              echo "Cloning repository..."
               git clone git@github.com:yourusername/your-repo.git .
             fi
-            
-            echo "=== INSTALLING DEPENDENCIES ==="
+            echo "Current commit: $(git rev-parse HEAD)"
+
+      # Step 5: Install and Build
+      - name: 5. Install Dependencies
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/ai-job-backend
             npm install --omit=dev --no-audit --no-fund
-            
-            echo "=== BUILDING APP ==="
+
+      - name: 6. Build App
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/ai-job-backend
             npm run build
-            
-            echo "=== CHECKING PM2 ==="
-            # Check if PM2 has the app
-            if pm2 list | grep -q "ai-job-backend"; then
-              echo "PM2 app exists, reloading..."
-              pm2 reload ecosystem.config.js --update-env
-            else
-              echo "PM2 app doesn't exist, starting..."
-              pm2 start ecosystem.config.js
-            fi
-            
-            pm2 save
-            
-            echo "=== CHECKING PM2 STATUS ==="
+
+      # Step 6: PM2 Restart
+      - name: 7. Restart with PM2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/ai-job-backend
+            echo "Current PM2 processes:"
             pm2 list
             
-            echo "=== CHECKING APP PORT ==="
-            netstat -tlnp | grep node || echo "No node process found"
+            if pm2 list | grep -q "ai-job-backend"; then
+              echo "Reloading PM2..."
+              pm2 reload ecosystem.config.js --update-env
+            else
+              echo "Starting PM2..."
+              pm2 start ecosystem.config.js
+            fi
+            pm2 save
             
-            echo "✅ Deployment completed at $(date)"
+            echo "Updated PM2 processes:"
+            pm2 list
+            
+            echo "App running on port:"
+            netstat -tlnp | grep node || echo "No node process found"
+
+      # Step 7: Final Check
+      - name: 8. Health Check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            echo "=== FINAL STATUS ==="
+            echo "App directory: /var/www/ai-job-backend"
+            echo "Node version: $(node --version)"
+            echo "NPM version: $(npm --version)"
+            echo "PM2 status:"
+            pm2 list
+            echo "App logs (last 10 lines):"
+            pm2 logs ai-job-backend --lines 10 --nostream
