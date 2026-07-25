@@ -27,17 +27,19 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Debug - Test SSH connection first
+      - name: Debug - Test SSH connection
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
           script: |
             echo "✅ SSH connection successful!"
-            whoami
-            pwd
-            ls -la
+            echo "User: $(whoami)"
+            echo "Home: $(pwd)"
+            echo "Directory contents:"
+            ls -la /var/www/
         continue-on-error: true
         id: ssh_test
 
@@ -48,7 +50,6 @@ jobs:
           echo "Host: ${{ secrets.VPS_HOST }}"
           echo "User: ${{ secrets.VPS_USER }}"
           echo "Key length: $(echo -n '${{ secrets.VPS_SSH_KEY }}' | wc -c) characters"
-          echo "Key first 20 chars: $(echo '${{ secrets.VPS_SSH_KEY }}' | cut -c1-20)"
 
       - name: Deploy to VPS
         if: steps.ssh_test.outcome == 'success'
@@ -57,14 +58,63 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22 # Explicitly specify port
-          script_stop: true # Stop on first error
+          port: 22
+          script_stop: true
           script: |
-            cd /var/www/ai-job-backend
+            echo "=== STARTING DEPLOYMENT ==="
+            echo "Current user: $(whoami)"
+            echo "Current directory: $(pwd)"
+            
+            # Check if app directory exists
+            if [ -d "/var/www/ai-job-backend" ]; then
+              echo "✅ App directory exists"
+              cd /var/www/ai-job-backend
+              echo "Current directory: $(pwd)"
+              echo "Directory contents:"
+              ls -la
+            else
+              echo "❌ App directory /var/www/ai-job-backend does NOT exist!"
+              echo "Creating directory..."
+              mkdir -p /var/www/ai-job-backend
+              cd /var/www/ai-job-backend
+              echo "Directory created. Cloning repo..."
+              git clone git@github.com:yourusername/your-repo.git .
+            fi
+            
+            echo "=== PULLING LATEST CODE ==="
             export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_deploy_key -o IdentitiesOnly=yes"
-            git pull origin main
+            
+            # Check if git is initialized
+            if [ -d ".git" ]; then
+              echo "Git repository exists, pulling..."
+              git pull origin main
+            else
+              echo "No git repository, cloning..."
+              git clone git@github.com:yourusername/your-repo.git .
+            fi
+            
+            echo "=== INSTALLING DEPENDENCIES ==="
             npm install --omit=dev --no-audit --no-fund
+            
+            echo "=== BUILDING APP ==="
             npm run build
-            pm2 reload ecosystem.config.js --update-env || pm2 start ecosystem.config.js
+            
+            echo "=== CHECKING PM2 ==="
+            # Check if PM2 has the app
+            if pm2 list | grep -q "ai-job-backend"; then
+              echo "PM2 app exists, reloading..."
+              pm2 reload ecosystem.config.js --update-env
+            else
+              echo "PM2 app doesn't exist, starting..."
+              pm2 start ecosystem.config.js
+            fi
+            
             pm2 save
+            
+            echo "=== CHECKING PM2 STATUS ==="
+            pm2 list
+            
+            echo "=== CHECKING APP PORT ==="
+            netstat -tlnp | grep node || echo "No node process found"
+            
             echo "✅ Deployment completed at $(date)"
