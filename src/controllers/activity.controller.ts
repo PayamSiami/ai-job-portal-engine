@@ -51,29 +51,6 @@ class ActivityController {
   );
 
   /**
-   * Get recent activities
-   * GET /api/dashboard/activities/recent
-   */
-  getRecentActivities = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
-      const userId = getUserId(req);
-
-      if (!userId) {
-        throw new AppError("User not authenticated", 401);
-      }
-
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-
-      const activities = await activityService.getRecentActivities(
-        userId,
-        limit,
-      );
-
-      sendSuccess(res, activities, "Recent activities fetched successfully");
-    },
-  );
-
-  /**
    * Get activity statistics
    * GET /api/dashboard/activities/stats
    */
@@ -91,40 +68,6 @@ class ActivityController {
     },
   );
 
-  getEmployerActivities = catchAsync(async (req: Request, res: Response) => {
-    const employerId = (req as any).user?.id;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const days = parseInt(req.query.days as string) || 30;
-    const type = req.query.type as string;
-    const status = req.query.status as string;
-
-    if (!employerId) {
-      throw new AppError("Unauthorized - Employer ID not found", 401);
-    }
-
-    const dateFrom = new Date();
-    dateFrom.setDate(dateFrom.getDate() - days);
-
-    const result = await activityService.getEmployerActivities(employerId, {
-      limit,
-      type,
-      status,
-      dateFrom,
-      dateTo: new Date(),
-    });
-
-    res.status(200).json({
-      success: true,
-      data: result.activities,
-      meta: {
-        count: result.activities.length,
-        limit,
-        days,
-        filters: { type, status },
-      },
-      pagination: result.pagination,
-    });
-  });
 }
 
 export default new ActivityController();

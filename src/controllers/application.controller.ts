@@ -220,7 +220,7 @@ class ApplicationController {
 
   getApplicationStats = async (req: Request, res: Response) => {
     try {
-      const employerId = req.user?._id; // Assuming user is attached by auth middleware
+      const employerId = getUserId(req);
 
       if (!employerId) {
         return res.status(401).json({

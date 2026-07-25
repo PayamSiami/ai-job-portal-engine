@@ -72,8 +72,17 @@ router.get(
   applicationController.getEmployerApplications,
 );
 
+/**
+ * @swagger
+ * /api/applications/stats:
+ *   get:
+ *     summary: Get applications for stats's jobs
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
-  "/applications/stats",
+  "/stats",
   protect,
   applicationController.getApplicationStats,
 );

@@ -10,11 +10,7 @@ router.get(
   protect,
   activityController.getActivities,
 );
-router.get(
-  "/recent",
-  protect,
-  activityController.getRecentActivities,
-);
+
 router.get(
   "/stats",
   protect,

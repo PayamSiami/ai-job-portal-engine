@@ -2,7 +2,6 @@
 import Job from "../models/Job.models.js";
 import Application, { ApplicationStatus } from "../models/Application.model.js";
 import Company from "../models/Company.models.js";
-import { AppError } from "../utils/errorHandler.js";
 import jobService from "./job.service.js";
 
 export interface Activity {
@@ -46,6 +45,12 @@ export interface ActivityStats {
 }
 
 class ActivityService {
+  // services/activity.service.ts
+
+  /**
+   * Get activities for an employer with filters and pagination
+   * Merged version that handles both company-based and direct job-based queries
+   */
   async getActivities(
     employerId: string,
     filters: {
@@ -60,109 +65,12 @@ class ActivityService {
     const { type, status, dateFrom, dateTo, limit = 20, page = 1 } = filters;
     const skip = (page - 1) * limit;
 
-    const jobs = await jobService.getJobsByEmployer(employerId);
+    // ✅ Get jobs for this employer
+    let jobs: any[] = [];
+
+    jobs = await jobService.getJobsByEmployer(employerId);
+
     const jobIds = jobs.map((job: any) => job._id);
-
-    if (jobIds.length === 0) {
-      return {
-        activities: [],
-        pagination: { page, limit, total: 0, pages: 0 },
-      };
-    }
-
-    const allActivities: Activity[] = [];
-
-    // Get application activities
-    const appActivities = await this.getApplicationActivities(
-      jobIds,
-      jobs,
-      type,
-      status,
-      dateFrom,
-      dateTo,
-    );
-    allActivities.push(...appActivities);
-
-    // Get screening activities
-    const screeningActivities = await this.getScreeningActivities(
-      jobIds,
-      jobs,
-      type,
-      status,
-      dateFrom,
-      dateTo,
-    );
-    allActivities.push(...screeningActivities);
-
-    // Get interview activities
-    const interviewActivities = await this.getInterviewActivities(
-      jobIds,
-      jobs,
-      type,
-      status,
-      dateFrom,
-      dateTo,
-    );
-    allActivities.push(...interviewActivities);
-
-    // Get status change activities
-    const statusActivities = await this.getStatusChangeActivities(
-      jobIds,
-      jobs,
-      type,
-      status,
-      dateFrom,
-      dateTo,
-    );
-    allActivities.push(...statusActivities);
-
-    // Get job creation activities
-    const jobActivities = await this.getJobCreationActivities(
-      jobs,
-      type,
-      status,
-      dateFrom,
-      dateTo,
-    );
-    allActivities.push(...jobActivities);
-
-    // Sort by timestamp
-    allActivities.sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-    );
-
-    const total = allActivities.length;
-    const paginatedActivities = allActivities.slice(skip, skip + limit);
-
-    return {
-      activities: paginatedActivities,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  /**
-   * Get activities for an employer with filters and pagination
-   */
-  async getEmployerActivities(
-    employerId: string,
-    filters: ActivityFilters = {},
-  ): Promise<{ activities: Activity[]; pagination: any }> {
-    const { type, status, dateFrom, dateTo, limit = 20, page = 1 } = filters;
-    const skip = (page - 1) * limit;
-
-    const company = await Company.findOne({ ownerId: employerId });
-    if (!company) {
-      throw new AppError("Company not found", 404);
-    }
-
-    const jobs = await Job.find({ company: company._id }).select("_id title");
-    const jobIds = jobs.map((j) => j._id);
 
     if (jobIds.length === 0) {
       return {
@@ -271,21 +179,10 @@ class ActivityService {
   }
 
   /**
-   * Get recent activities (last N items)
-   */
-  async getRecentActivities(
-    employerId: string,
-    limit: number = 10,
-  ): Promise<Activity[]> {
-    const result = await this.getEmployerActivities(employerId, { limit });
-    return result.activities;
-  }
-
-  /**
    * Get activity statistics
    */
   async getActivityStats(employerId: string): Promise<ActivityStats> {
-    const result = await this.getEmployerActivities(employerId, {
+    const result = await this.getActivities(employerId, {
       limit: 1000,
     });
     const activities = result.activities;

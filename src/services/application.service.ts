@@ -809,7 +809,7 @@ class ApplicationService {
     }
 
     const matchStage: any = {
-      jobId: { $in: jobIds },
+      job: { $in: jobIds },
       createdAt: {
         $gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000),
       },
@@ -846,197 +846,205 @@ class ApplicationService {
     }));
   }
 
+  // services/application.service.ts
+
   async getApplicationStats(employerId: string): Promise<ApplicationStats> {
-    // Validate employer ID
-    if (!mongoose.Types.ObjectId.isValid(employerId)) {
-      throw new Error("Invalid employer ID format");
-    }
+    try {
+      // ✅ Validate employer ID
+      if (!mongoose.Types.ObjectId.isValid(employerId)) {
+        throw new AppError("Invalid employer ID format", 400);
+      }
 
-    // Get all jobs for this employer
-    const jobs = await jobService.getJobsByEmployer(employerId, {
-      page: 0,
-      limit: 10,
-    });
-    const jobIds = jobs.map((job: any) => job._id);
+      // ✅ Get all jobs for this employer
+      const jobs = await jobService.getJobsByEmployer(employerId);
+      const jobIds = jobs.map((job: any) => job._id);
 
-    if (jobIds.length === 0) {
-      return this.getEmptyApplicationStats();
-    }
+      if (jobIds.length === 0) {
+        return this.getEmptyApplicationStats();
+      }
 
-    // Type the pipeline as any[] to avoid TypeScript issues
-    const pipeline: any[] = [
-      {
-        $match: {
-          job: { $in: jobIds },
+      const pipeline: any[] = [
+        {
+          $match: {
+            job: { $in: jobIds },
+          },
         },
-      },
-      {
-        $facet: {
-          statusCounts: [
-            {
-              $group: {
-                _id: "$status",
-                count: { $sum: 1 },
-              },
-            },
-          ],
-          aiStats: [
-            {
-              $match: {
-                aiScore: { $exists: true, $ne: null },
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                averageAIScore: { $avg: "$aiScore" },
-                totalScreened: { $sum: 1 },
-              },
-            },
-          ],
-          applicationsByJob: [
-            {
-              $lookup: {
-                from: "jobs",
-                localField: "job",
-                foreignField: "_id",
-                as: "jobData",
-              },
-            },
-            {
-              $unwind: {
-                path: "$jobData",
-                preserveNullAndEmptyArrays: true,
-              },
-            },
-            {
-              $group: {
-                _id: "$jobData.title",
-                count: { $sum: 1 },
-              },
-            },
-            {
-              $sort: { count: -1 },
-            },
-            {
-              $limit: 10,
-            },
-          ],
-          recentActivity: [
-            {
-              $match: {
-                createdAt: {
-                  $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        {
+          $facet: {
+            statusCounts: [
+              {
+                $group: {
+                  _id: "$status",
+                  count: { $sum: 1 },
                 },
               },
-            },
-            {
-              $group: {
-                _id: {
-                  $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-                },
-                count: { $sum: 1 },
-              },
-            },
-            {
-              $sort: { _id: 1 },
-            },
-          ],
-          hiredApplications: [
-            {
-              $match: {
-                status: ApplicationStatus.HIRED,
-                createdAt: { $exists: true },
-                updatedAt: { $exists: true },
-              },
-            },
-            {
-              $project: {
-                timeToHire: {
-                  $subtract: ["$updatedAt", "$createdAt"],
+            ],
+            aiStats: [
+              {
+                $match: {
+                  aiScore: { $exists: true, $ne: null },
                 },
               },
-            },
-          ],
+              {
+                $group: {
+                  _id: null,
+                  averageAIScore: { $avg: "$aiScore" },
+                  totalScreened: { $sum: 1 },
+                },
+              },
+            ],
+            applicationsByJob: [
+              {
+                $lookup: {
+                  from: "jobs",
+                  localField: "job",
+                  foreignField: "_id",
+                  as: "jobData",
+                },
+              },
+              {
+                $unwind: {
+                  path: "$jobData",
+                  preserveNullAndEmptyArrays: true,
+                },
+              },
+              {
+                $group: {
+                  _id: "$jobData.title",
+                  count: { $sum: 1 },
+                },
+              },
+              {
+                $sort: { count: -1 },
+              },
+              {
+                $limit: 10,
+              },
+            ],
+            recentActivity: [
+              {
+                $match: {
+                  createdAt: {
+                    $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+                  },
+                },
+              },
+              {
+                $group: {
+                  _id: {
+                    $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+                  },
+                  count: { $sum: 1 },
+                },
+              },
+              {
+                $sort: { _id: 1 },
+              },
+            ],
+            hiredApplications: [
+              {
+                $match: {
+                  status: ApplicationStatus.HIRED,
+                  createdAt: { $exists: true },
+                  updatedAt: { $exists: true },
+                },
+              },
+              {
+                $project: {
+                  timeToHire: {
+                    $subtract: ["$updatedAt", "$createdAt"],
+                  },
+                },
+              },
+            ],
+          },
         },
-      },
-    ];
+      ];
 
-    const result = await Application.aggregate(pipeline);
-    const data = result[0] || {};
+      const result = await Application.aggregate(pipeline);
+      const data = result[0] || {};
 
-    // Process status counts
-    const statusCounts: Record<string, number> = {};
-    (data.statusCounts || []).forEach((item: any) => {
-      statusCounts[item._id] = item.count;
-    });
+      // Process status counts
+      const statusCounts: Record<string, number> = {};
+      (data.statusCounts || []).forEach((item: any) => {
+        statusCounts[item._id] = item.count;
+      });
 
-    // Process AI stats
-    const aiStats = data.aiStats?.[0] || {
-      averageAIScore: 0,
-      totalScreened: 0,
-    };
+      // Process AI stats
+      const aiStats = data.aiStats?.[0] || {
+        averageAIScore: 0,
+        totalScreened: 0,
+      };
 
-    // Calculate total applications
-    const totalApplications = Object.values(statusCounts).reduce(
-      (sum: number, count: number) => sum + count,
-      0,
-    );
-
-    // Calculate screening coverage
-    const screeningCoverage =
-      totalApplications > 0
-        ? (aiStats.totalScreened / totalApplications) * 100
-        : 0;
-
-    // Calculate average time to hire
-    let averageTimeToHire = 0;
-    if (data.hiredApplications && data.hiredApplications.length > 0) {
-      const totalDays = data.hiredApplications.reduce(
-        (sum: number, app: any) => {
-          const days = app.timeToHire / (1000 * 60 * 60 * 24);
-          return sum + days;
-        },
+      // Calculate total applications
+      const totalApplications = Object.values(statusCounts).reduce(
+        (sum: number, count: number) => sum + count,
         0,
       );
-      averageTimeToHire = totalDays / data.hiredApplications.length;
-    }
 
-    return {
-      total: totalApplications,
-      pending: statusCounts[ApplicationStatus.PENDING] || 0,
-      reviewing: statusCounts[ApplicationStatus.REVIEWING] || 0,
-      shortlisted: statusCounts[ApplicationStatus.SHORTLISTED] || 0,
-      interviewing: statusCounts[ApplicationStatus.INTERVIEWING] || 0,
-      rejected: statusCounts[ApplicationStatus.REJECTED] || 0,
-      hired: statusCounts[ApplicationStatus.HIRED] || 0,
-      averageAIScore: Math.round((aiStats.averageAIScore || 0) * 100) / 100,
-      screeningCoverage: Math.round(screeningCoverage * 100) / 100,
-      statusBreakdown: {
-        [ApplicationStatus.PENDING]:
-          statusCounts[ApplicationStatus.PENDING] || 0,
-        [ApplicationStatus.REVIEWING]:
-          statusCounts[ApplicationStatus.REVIEWING] || 0,
-        [ApplicationStatus.SHORTLISTED]:
-          statusCounts[ApplicationStatus.SHORTLISTED] || 0,
-        [ApplicationStatus.INTERVIEWING]:
-          statusCounts[ApplicationStatus.INTERVIEWING] || 0,
-        [ApplicationStatus.HIRED]: statusCounts[ApplicationStatus.HIRED] || 0,
-        [ApplicationStatus.REJECTED]:
-          statusCounts[ApplicationStatus.REJECTED] || 0,
-        [ApplicationStatus.WITHDRAWN]:
-          statusCounts[ApplicationStatus.WITHDRAWN] || 0,
-      },
-      recentActivity: (data.recentActivity || []).map((item: any) => ({
-        date: item._id,
-        count: item.count,
-      })),
-      applicationsByJob: (data.applicationsByJob || []).map((item: any) => ({
-        jobTitle: item._id || "Unknown",
-        count: item.count,
-      })),
-      averageTimeToHire: Math.round(averageTimeToHire * 100) / 100,
-    };
+      // Calculate screening coverage
+      const screeningCoverage =
+        totalApplications > 0
+          ? (aiStats.totalScreened / totalApplications) * 100
+          : 0;
+
+      // Calculate average time to hire
+      let averageTimeToHire = 0;
+      if (data.hiredApplications && data.hiredApplications.length > 0) {
+        const totalDays = data.hiredApplications.reduce(
+          (sum: number, app: any) => {
+            const days = app.timeToHire / (1000 * 60 * 60 * 24);
+            return sum + days;
+          },
+          0,
+        );
+        averageTimeToHire = totalDays / data.hiredApplications.length;
+      }
+
+      return {
+        total: totalApplications,
+        pending: statusCounts[ApplicationStatus.PENDING] || 0,
+        reviewing: statusCounts[ApplicationStatus.REVIEWING] || 0,
+        shortlisted: statusCounts[ApplicationStatus.SHORTLISTED] || 0,
+        interviewing: statusCounts[ApplicationStatus.INTERVIEWING] || 0,
+        rejected: statusCounts[ApplicationStatus.REJECTED] || 0,
+        hired: statusCounts[ApplicationStatus.HIRED] || 0,
+        averageAIScore: Math.round((aiStats.averageAIScore || 0) * 100) / 100,
+        screeningCoverage: Math.round(screeningCoverage * 100) / 100,
+        statusBreakdown: {
+          [ApplicationStatus.PENDING]:
+            statusCounts[ApplicationStatus.PENDING] || 0,
+          [ApplicationStatus.REVIEWING]:
+            statusCounts[ApplicationStatus.REVIEWING] || 0,
+          [ApplicationStatus.SHORTLISTED]:
+            statusCounts[ApplicationStatus.SHORTLISTED] || 0,
+          [ApplicationStatus.INTERVIEWING]:
+            statusCounts[ApplicationStatus.INTERVIEWING] || 0,
+          [ApplicationStatus.HIRED]: statusCounts[ApplicationStatus.HIRED] || 0,
+          [ApplicationStatus.REJECTED]:
+            statusCounts[ApplicationStatus.REJECTED] || 0,
+          [ApplicationStatus.WITHDRAWN]:
+            statusCounts[ApplicationStatus.WITHDRAWN] || 0,
+        },
+        recentActivity: (data.recentActivity || []).map((item: any) => ({
+          date: item._id,
+          count: item.count,
+        })),
+        applicationsByJob: (data.applicationsByJob || []).map((item: any) => ({
+          jobTitle: item._id || "Unknown",
+          count: item.count,
+        })),
+        averageTimeToHire: Math.round(averageTimeToHire * 100) / 100,
+      };
+    } catch (error) {
+      logger.error("Error in getApplicationStats:", error);
+      throw new AppError(
+        error instanceof Error
+          ? error.message
+          : "Failed to get application stats",
+        500,
+      );
+    }
   }
 
   // ============ Private Helper Methods ============
