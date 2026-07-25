@@ -3,7 +3,7 @@ name: Deploy to VPS
 on:
   push:
     branches: [main]
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -20,19 +20,45 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund # Using install since it works
+        run: npm install --no-audit --no-fund
 
       - name: Build application
         run: npm run build
         env:
           NODE_ENV: production
 
-      - name: Deploy to VPS
+      - name: Debug - Test SSH connection first
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "✅ SSH connection successful!"
+            whoami
+            pwd
+            ls -la
+        continue-on-error: true
+        id: ssh_test
+
+      - name: Debug - Show SSH error
+        if: steps.ssh_test.outcome == 'failure'
+        run: |
+          echo "❌ SSH failed! Checking secrets..."
+          echo "Host: ${{ secrets.VPS_HOST }}"
+          echo "User: ${{ secrets.VPS_USER }}"
+          echo "Key length: $(echo -n '${{ secrets.VPS_SSH_KEY }}' | wc -c) characters"
+          echo "Key first 20 chars: $(echo '${{ secrets.VPS_SSH_KEY }}' | cut -c1-20)"
+
+      - name: Deploy to VPS
+        if: steps.ssh_test.outcome == 'success'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22 # Explicitly specify port
+          script_stop: true # Stop on first error
           script: |
             cd /var/www/ai-job-backend
             export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_deploy_key -o IdentitiesOnly=yes"
