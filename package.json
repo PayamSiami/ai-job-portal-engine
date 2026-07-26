@@ -17,11 +17,9 @@
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write src/**/*.ts",
-    "prestart": "npm run build",
     "clean": "rimraf dist node_modules package-lock.json",
     "clean:install": "npm run clean && npm install",
-    "type-check": "tsc --noEmit",
-    "prepare": "npm run build"
+    "type-check": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
