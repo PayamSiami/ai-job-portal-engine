@@ -4,14 +4,20 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install ALL dependencies
-RUN npm install
+# Install ONLY production dependencies (no dev dependencies needed)
+RUN npm install --omit=dev && npm cache clean --force
 
-# Copy source code
-COPY . .
+# Copy the pre-built dist folder and src (for reference)
+COPY dist ./dist
+COPY src ./src 2>/dev/null || echo "No src folder"
 
-# Expose port
 EXPOSE 5000
 
-# Start the app
-CMD ["sh", "-c", "if [ -f \"dist/app.js\" ]; then node dist/app.js; else node src/app.js; fi"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1
+
+CMD ["node", "dist/app.js"]
+EOF
+
+echo "✅ Dockerfile updated to use pre-built dist"
