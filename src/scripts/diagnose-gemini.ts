@@ -50,7 +50,7 @@ async function diagnose() {
 async function getIP() {
   try {
     const response = await fetch("https://api.ipify.org?format=json");
-    const data = await response.json();
+    const data: any = await response.json();
     return data.ip;
   } catch {
     return "Unknown";

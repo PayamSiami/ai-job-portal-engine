@@ -1,26 +1,17 @@
-# Better Production Stage
-FROM node:20-alpine AS runner
+FROM node:20-alpine
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
-
-# Optimize dependency installation
+# Copy package files
 COPY package*.json ./
-COPY package-lock*.json ./
-RUN npm ci --omit=dev --ignore-scripts && \
-    npm cache clean --force
 
-# Copy built application
-COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
+# Install ALL dependencies
+RUN npm install
 
-USER nodejs
+# Copy source code
+COPY . .
+
+# Expose port
 EXPOSE 5000
 
-# Better health check using node
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5000/api/health',(r)=>{r.statusCode===200?process.exit(0):process.exit(1)})" || exit 1
-
-CMD ["node", "dist/app.js"]
+# Start the app
+CMD ["sh", "-c", "if [ -f \"dist/app.js\" ]; then node dist/app.js; else node src/app.js; fi"]

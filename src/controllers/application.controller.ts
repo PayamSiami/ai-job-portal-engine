@@ -218,43 +218,26 @@ class ApplicationController {
     },
   );
 
-  getApplicationStats = async (req: Request, res: Response) => {
-    try {
+  getApplicationStats = asyncHandler( 
+    async (req: Request, res: Response):Promise<void> => {
       const employerId = getUserId(req);
 
       if (!employerId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized - Employer ID not found",
-        });
+        throw new AppError("User not authenticated", 401);
       }
 
       // Validate employer ID
       if (!mongoose.Types.ObjectId.isValid(employerId.toString())) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid employer ID format",
-        });
+        throw new AppError("Invalid employer ID format", 400);
       }
 
       const stats = await applicationService.getApplicationStats(
         employerId.toString(),
       );
 
-      res.status(200).json({
-        success: true,
-        data: stats,
-        message: "Application stats fetched successfully",
-      });
-    } catch (error: any) {
-      console.error("Error fetching application stats:", error);
-      res.status(500).json({
-        success: false,
-        message: error.message || "Failed to fetch application stats",
-        error: process.env.NODE_ENV === "development" ? error : undefined,
-      });
-    }
-  };
+      sendSuccess(res, stats, "Application stats fetched successfully");
+    },
+  );
 
   /**
    * Get application details (applicant or employer)
