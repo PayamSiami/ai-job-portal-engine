@@ -1,7 +1,7 @@
 // utils/companyHelper.ts
 import { Types } from "mongoose";
-import Company from "../models/Company.models";
-import logger from "./logger";
+import Company from "../models/Company.models.js";
+import logger from "./logger.js";
 
 /**
  * Get company name from job object

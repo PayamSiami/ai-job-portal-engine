@@ -9,7 +9,6 @@ export const getStringQueryParam = (value) => {
     }
     return value.toString();
 };
-// ✅ Helper for number query parameters
 export const getNumberQueryParam = (value, defaultValue) => {
     const str = getStringQueryParam(value);
     if (!str)
@@ -17,7 +16,6 @@ export const getNumberQueryParam = (value, defaultValue) => {
     const num = parseInt(str, 10);
     return isNaN(num) ? defaultValue : num;
 };
-// ✅ Helper for boolean query parameters
 export const getBooleanQueryParam = (value) => {
     const str = getStringQueryParam(value);
     if (str === undefined)

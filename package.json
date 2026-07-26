@@ -29,7 +29,6 @@
     "@google/generative-ai": "^0.24.1",
     "@types/gridfs-stream": "^0.5.39",
     "@types/multer": "^2.2.0",
-    "@types/pdfkit": "^0.17.6",
     "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
@@ -46,7 +45,7 @@
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.3",
     "kafka-node": "^5.0.0",
-    "mongoose": "^9.7.3",
+    "mongoose": "^9.8.0",
     "morgan": "^1.11.0",
     "multer": "^2.2.0",
     "node-cache": "^5.1.2",
@@ -60,12 +59,15 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/express-validator": "^2.20.33",
     "@types/json2csv": "^5.0.7",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.1",
+    "@types/pdfkit": "^0.17.6",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/winston": "^2.4.4",
@@ -76,13 +78,7 @@
     "prettier": "^3.0.0",
     "rimraf": "^6.1.3",
     "supertest": "^7.2.2",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.1",
     "typescript": "^7.0.2"
-  },
-  "ts-node": {
-    "esm": true,
-    "experimentalSpecifierResolution": "node",
-    "transpileOnly": true
   }
 }

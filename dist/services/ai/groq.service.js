@@ -1,10 +1,8 @@
-// backend/src/services/ai/groq.service.ts
 import Groq from "groq-sdk";
 import { config } from "../../config/index";
 const groq = new Groq({
     apiKey: config.GROQ_API_KEY,
 });
-// backend/src/services/ai/groq.service.ts
 export const generateWithGroq = async (prompt) => {
     try {
         const response = await groq.chat.completions.create({
@@ -23,11 +21,10 @@ export const generateWithGroq = async (prompt) => {
                 },
             ],
             model: config.GROQ_MODEL || "llama-3.3-70b-versatile",
-            temperature: 0.3, // Lower temperature for more consistent JSON output
+            temperature: 0.3,
             max_tokens: 800,
         });
         const content = response.choices[0]?.message?.content || "";
-        // Log first 200 chars for debugging
         console.log("📝 Groq response preview:", content.substring(0, 200) + "...");
         return {
             content,
@@ -47,7 +44,7 @@ export const testGroqConnection = async () => {
     try {
         const response = await groq.chat.completions.create({
             messages: [{ role: "user", content: 'Say "Groq is working!"' }],
-            model: config.GROQ_MODEL || "llama-3.3-70b-versatile", // ✅ Updated
+            model: config.GROQ_MODEL || "llama-3.3-70b-versatile",
             max_tokens: 20,
         });
         const content = response.choices[0]?.message?.content || "";

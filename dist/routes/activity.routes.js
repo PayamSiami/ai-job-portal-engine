@@ -1,4 +1,3 @@
-// routes/dashboard.routes.ts
 import { Router } from "express";
 import { protect } from "../middleware/authMiddleware";
 import activityController from "../controllers/activity.controller";

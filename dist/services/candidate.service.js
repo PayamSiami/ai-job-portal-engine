@@ -1,4 +1,3 @@
-// backend/src/services/candidate.service.ts
 import mongoose from "mongoose";
 import Job from "../models/Job.models";
 import Application, { ApplicationStatus } from "../models/Application.model";
@@ -16,18 +15,13 @@ export class CandidateService {
         this.Resume = Resume;
         this.User = User;
     }
-    /**
-     * Get candidates with filters and pagination
-     */
     async getCandidates(employerId, filters, options) {
         try {
-            // Validate employer ID
             if (!mongoose.Types.ObjectId.isValid(employerId)) {
                 throw new Error("Invalid employer ID format");
             }
             const { page, limit, sortBy = "createdAt", sortOrder = "desc" } = options;
             const skip = (page - 1) * limit;
-            // Get all jobs for this employer
             const jobs = await jobService.getJobsByEmployer(employerId);
             const jobIds = jobs.map((job) => job._id);
             if (jobIds.length === 0) {
@@ -37,15 +31,12 @@ export class CandidateService {
                     statusSummary: [],
                 };
             }
-            // Build match stage
             const matchStage = {
                 job: { $in: jobIds },
             };
-            // Add status filter
             if (filters.status && filters.status !== "all") {
                 matchStage.status = filters.status;
             }
-            // Build the pipeline
             const pipeline = [
                 {
                     $match: matchStage,
@@ -61,7 +52,7 @@ export class CandidateService {
                 {
                     $unwind: {
                         path: "$userData",
-                        preserveNullAndEmptyArrays: false, // Only return applications with users
+                        preserveNullAndEmptyArrays: false,
                     },
                 },
                 {
@@ -78,9 +69,7 @@ export class CandidateService {
                         preserveNullAndEmptyArrays: true,
                     },
                 },
-                // Apply search filters
                 ...(filters.search ? [this.buildSearchFilter(filters.search)] : []),
-                // Add status summary
                 {
                     $facet: {
                         metadata: [{ $count: "total" }],
@@ -124,7 +113,6 @@ export class CandidateService {
             const result = await this.Application.aggregate(pipeline);
             const candidates = result[0]?.data || [];
             const total = result[0]?.metadata[0]?.total || 0;
-            // Get status summary
             const statusSummary = await this.getStatusSummary(jobIds, filters);
             return {
                 candidates,
@@ -137,12 +125,8 @@ export class CandidateService {
             throw new Error(`Failed to get candidates: ${error.message}`);
         }
     }
-    /**
-     * Get AI-powered candidate recommendations
-     */
     async getCandidateRecommendations(employerId, params) {
         try {
-            // 1. Get all jobs for this employer
             const jobs = await this.Job.find({
                 postedBy: employerId,
                 isDeleted: { $ne: true },
@@ -152,7 +136,6 @@ export class CandidateService {
                 console.log("⚠️ No active jobs found for employer");
                 return [];
             }
-            // 2. If jobId is provided, use that job, otherwise use all jobs
             let targetJobs = jobs;
             if (params.jobId) {
                 const specificJob = jobs.find((j) => j._id.toString() === params.jobId);
@@ -165,9 +148,7 @@ export class CandidateService {
                 }
             }
             console.log(`📊 Target jobs: ${targetJobs.length}`);
-            // 3. Get job IDs
             const jobIds = targetJobs.map((job) => job._id);
-            // 4. Get all applications for these jobs
             const applications = await this.Application.find({
                 jobId: { $in: jobIds },
             })
@@ -179,25 +160,20 @@ export class CandidateService {
                 return [];
             }
             console.log(`📊 Found ${applications.length} applications`);
-            // 5. Calculate match scores for each application
             const recommendations = [];
             for (const application of applications) {
                 const resume = application.resumeId;
                 const job = targetJobs.find((j) => j._id.toString() === application.jobId.toString());
                 if (!resume || !job)
                     continue;
-                // Calculate match details
                 const matchDetails = await this.calculateMatchScore(resume, job, params);
-                // Filter by minimum score
                 if (matchDetails.overallMatch < params.minScore)
                     continue;
-                // Filter by skills if provided
                 if (params.skills && params.skills.length > 0) {
                     const hasRequiredSkill = params.skills.some((skill) => resume.skills?.some((s) => s.name?.toLowerCase().includes(skill.toLowerCase())));
                     if (!hasRequiredSkill)
                         continue;
                 }
-                // Filter by experience
                 if (params.experienceMin && resume.experience < params.experienceMin)
                     continue;
                 if (params.experienceMax && resume.experience > params.experienceMax)
@@ -215,7 +191,6 @@ export class CandidateService {
                     resume: resume,
                 });
             }
-            // 6. Sort by match score descending and limit
             recommendations.sort((a, b) => b.matchScore - a.matchScore);
             const limitedRecommendations = recommendations.slice(0, params.limit);
             console.log(`✅ Found ${limitedRecommendations.length} recommendations`);
@@ -226,11 +201,7 @@ export class CandidateService {
             throw error;
         }
     }
-    /**
-     * Calculate match score between a candidate and a job
-     */
     async calculateMatchScore(resume, job, params) {
-        // 1. Skills Match
         const jobSkills = job.skills || [];
         const candidateSkills = resume.skills?.map((s) => s.name?.toLowerCase()) || [];
         const matchedSkills = jobSkills.filter((skill) => candidateSkills.some((cs) => cs.includes(skill.toLowerCase())));
@@ -238,10 +209,8 @@ export class CandidateService {
         const skillsMatchPercentage = jobSkills.length > 0
             ? (matchedSkills.length / jobSkills.length) * 100
             : 100;
-        // 2. Experience Match
         const candidateYears = resume.experience || 0;
-        // Extract required experience from job description or use default
-        let requiredYears = 2; // Default
+        let requiredYears = 2;
         if (job.experienceLevel) {
             const expMap = {
                 entry: 0,
@@ -252,7 +221,6 @@ export class CandidateService {
             requiredYears = expMap[job.experienceLevel] || 2;
         }
         const experienceMatch = candidateYears >= requiredYears;
-        // 3. Education Match
         let educationMatch = false;
         let educationDetails = "No education data";
         if (resume.education && resume.education.length > 0) {
@@ -260,14 +228,13 @@ export class CandidateService {
             const degrees = resume.education.map((e) => e.degree).join(", ");
             educationDetails = `Candidate has: ${degrees}`;
         }
-        // 4. Calculate Overall Match Score
         const weights = {
             skills: 0.5,
             experience: 0.3,
             education: 0.1,
             aiScore: 0.1,
         };
-        const aiScore = resume.aiScore || 50; // Default to 50 if no AI score
+        const aiScore = resume.aiScore || 50;
         const overallMatch = (skillsMatchPercentage / 100) * weights.skills * 100 +
             (experienceMatch ? 100 : 0) * weights.experience +
             (educationMatch ? 100 : 0) * weights.education +
@@ -291,9 +258,6 @@ export class CandidateService {
             overallMatch: Math.round(overallMatch),
         };
     }
-    /**
-     * Build search filters for MongoDB aggregation
-     */
     buildSearchFilters(filters, userAlias, resumeAlias) {
         const match = {};
         if (filters.search) {
@@ -326,19 +290,14 @@ export class CandidateService {
         }
         return match;
     }
-    /**
-     * Get candidate by ID
-     */
     async getCandidateById(candidateId, employerId) {
-        // ✅ Use findById with proper population
         const application = await this.Application.findById(candidateId)
-            .populate("userId", "name email phone location") // ✅ Use userId
+            .populate("userId", "name email phone location")
             .populate("jobId", "title company")
             .populate("resumeId");
         if (!application) {
             return null;
         }
-        // Check if the job belongs to this employer
         const job = await this.Job.findOne({
             _id: application.jobId,
             postedBy: employerId,
@@ -349,7 +308,7 @@ export class CandidateService {
         }
         return {
             _id: application._id,
-            user: application.userId, // ✅ Use userId
+            user: application.userId,
             job: application.jobId,
             status: application.status,
             appliedDate: application.appliedAt || application.createdAt,
@@ -363,12 +322,8 @@ export class CandidateService {
             aiWeaknesses: application.aiWeaknesses,
         };
     }
-    /**
-     * Update candidate status
-     */
     async updateCandidateStatus(candidateId, employerId, status, notes) {
         try {
-            // 1. Find the application
             const application = await this.Application.findById(candidateId);
             if (!application) {
                 console.log(`❌ Application not found: ${candidateId}`);
@@ -380,7 +335,6 @@ export class CandidateService {
                 userId: application.userId,
                 currentStatus: application.status,
             });
-            // 2. Verify the job belongs to this employer
             const job = await this.Job.findOne({
                 _id: application.jobId,
                 postedBy: employerId,
@@ -390,13 +344,10 @@ export class CandidateService {
                 console.log(`❌ Job not found or access denied for employer: ${employerId}`);
                 return null;
             }
-            // 3. Update status
             application.status = status;
-            // 4. Add notes if provided
             if (notes) {
                 application.notes = notes;
             }
-            // 5. Create status history entry
             application.statusHistory = application.statusHistory || [];
             application.statusHistory.push({
                 status,
@@ -404,17 +355,11 @@ export class CandidateService {
                 updatedAt: new Date(),
                 updatedBy: employerId,
             });
-            // 6. Update timestamp
             application.updatedAt = new Date();
-            // 7. If hired, add to employee records
             if (status === "hired") {
-                // Logic to add candidate as employee
                 console.log(`🎉 Candidate ${candidateId} was hired!`);
-                // You can add employee creation logic here
             }
-            // 8. Save the application
             await application.save();
-            // 9. Return populated application
             await application.populate("userId", "name email phone");
             await application.populate("jobId", "title company");
             return application;
@@ -424,14 +369,9 @@ export class CandidateService {
             throw error;
         }
     }
-    // backend/src/services/candidate.service.ts
-    /**
-     * Get candidate resume
-     */
     async getCandidateResume(candidateId, employerId) {
         try {
             console.log(`📄 Fetching resume for candidate: ${candidateId}`);
-            // 1. Verify the application exists
             const application = await this.Application.findById(candidateId);
             if (!application) {
                 console.log(`❌ Application not found: ${candidateId}`);
@@ -443,7 +383,6 @@ export class CandidateService {
                 userId: application.userId,
                 resumeId: application.resumeId,
             });
-            // 2. Verify the job belongs to this employer
             const job = await this.Job.findOne({
                 _id: application.jobId,
                 postedBy: employerId,
@@ -454,14 +393,11 @@ export class CandidateService {
                 return null;
             }
             console.log(`✅ Job belongs to employer: ${employerId}`);
-            // 3. Find the resume
-            // First try using resumeId from application
             let resume = null;
             if (application.resumeId) {
                 resume = await this.Resume.findById(application.resumeId);
                 console.log(`📄 Found resume by resumeId: ${!!resume}`);
             }
-            // If not found by resumeId, try by userId
             if (!resume) {
                 resume = await this.Resume.findOne({
                     userId: application.userId,
@@ -477,20 +413,15 @@ export class CandidateService {
                 title: resume.title,
                 hasPdf: !!resume.pdfFile,
             });
-            // 4. Return the PDF file
-            // If resume has a pdfFile (Buffer or path), return it
             if (resume.pdfFile) {
                 return resume.pdfFile;
             }
-            // If resume has a fileUrl or path
             if (resume.fileUrl) {
                 return resume.fileUrl;
             }
-            // If resume is stored in cloud storage (S3, Cloudinary, etc.)
             if (resume.cloudStorageUrl) {
                 return resume.cloudStorageUrl;
             }
-            // If resume is stored as a path
             if (resume.filePath) {
                 return resume.filePath;
             }
@@ -502,9 +433,6 @@ export class CandidateService {
             throw error;
         }
     }
-    /**
-     * Get candidate analytics for employer
-     */
     async getAnalytics(employerId) {
         const jobs = await this.Job.find({ employerId }).select("_id");
         const jobIds = jobs.map((job) => job._id);
@@ -555,9 +483,6 @@ export class CandidateService {
             topSkills,
         };
     }
-    /**
-     * Get top skills from candidates
-     */
     async getTopSkills(jobIds) {
         const applications = await this.Application.find({
             jobId: { $in: jobIds },
@@ -580,7 +505,6 @@ export class CandidateService {
             .sort((a, b) => b.count - a.count)
             .slice(0, 10);
     }
-    // Helper method for building search filter
     buildSearchFilter(search) {
         return {
             $match: {
@@ -594,7 +518,6 @@ export class CandidateService {
             },
         };
     }
-    // Get status summary
     async getStatusSummary(jobIds, filters) {
         try {
             const matchStage = {
@@ -624,7 +547,6 @@ export class CandidateService {
                     $sort: { count: -1 },
                 },
             ]);
-            // Ensure all statuses are represented
             const allStatuses = Object.values(ApplicationStatus);
             const summaryMap = new Map();
             summary.forEach((item) => {
@@ -640,9 +562,6 @@ export class CandidateService {
             return [];
         }
     }
-    /**
-     * Export candidates data
-     */
     async exportCandidates(employerId) {
         const jobs = await this.Job.find({ employerId }).select("_id");
         const jobIds = jobs.map((job) => job._id);
@@ -660,9 +579,6 @@ export class CandidateService {
             appliedDate: app.createdAt,
         }));
     }
-    /**
-     * Add note to candidate
-     */
     async addCandidateNote(candidateId, employerId, note) {
         const application = await this.Application.findById(candidateId);
         if (!application) {
@@ -681,9 +597,6 @@ export class CandidateService {
         await application.save();
         return application;
     }
-    /**
-     * Get candidate timeline
-     */
     async getCandidateTimeline(candidateId, employerId) {
         const application = await this.Application.findById(candidateId);
         if (!application) {
@@ -696,18 +609,12 @@ export class CandidateService {
         if (!job) {
             return null;
         }
-        // Return status history as timeline
         return application.statusHistory || [];
     }
-    /**
-     * Get candidate statistics for employer dashboard
-     */
     async getCandidateStats(employerId) {
-        // Validate employer ID
         if (!mongoose.Types.ObjectId.isValid(employerId)) {
             throw new Error("Invalid employer ID format");
         }
-        // Get all jobs for this employer
         const jobs = await jobService.getJobsByEmployer(employerId, {
             limit: 10,
             page: 0,
@@ -716,13 +623,11 @@ export class CandidateService {
         if (jobIds.length === 0) {
             return this.getEmptyCandidateStats();
         }
-        // Get all applications for these jobs
         const applications = await this.Application.find({
             job: { $in: jobIds },
         })
             .populate("user", "name email profile")
             .populate("job", "title");
-        // Status distribution
         const statusDistribution = {
             pending: applications.filter((a) => a.status === ApplicationStatus.PENDING).length,
             reviewing: applications.filter((a) => a.status === ApplicationStatus.REVIEWING).length,
@@ -736,23 +641,18 @@ export class CandidateService {
         const hiredCount = statusDistribution.hired;
         const rejectedCount = statusDistribution.rejected;
         const withdrawnCount = statusDistribution.withdrawn;
-        // Calculate conversion rate (hired / total)
         const conversionRate = totalCandidates > 0
             ? parseFloat(((hiredCount / totalCandidates) * 100).toFixed(1))
             : 0;
-        // Active candidates = total - rejected - hired - withdrawn
         const activeCandidates = totalCandidates - rejectedCount - hiredCount - withdrawnCount;
-        // Screening coverage
         const screenedCount = applications.filter((a) => a.aiScore && a.aiScore > 0).length;
         const screeningCoverage = totalCandidates > 0
             ? parseFloat(((screenedCount / totalCandidates) * 100).toFixed(1))
             : 0;
-        // Average AI score
         const applicationsWithScore = applications.filter((a) => a.aiScore && a.aiScore > 0);
         const avgAiScore = applicationsWithScore.length > 0
             ? parseFloat((applicationsWithScore.reduce((sum, a) => sum + a.aiScore, 0) / applicationsWithScore.length).toFixed(1))
             : 0;
-        // Candidates by job - FIXED: Use correct field name 'job' instead of 'jobId'
         const candidatesByJob = await this.Application.aggregate([
             {
                 $match: {
@@ -790,7 +690,6 @@ export class CandidateService {
                 $sort: { count: -1 },
             },
         ]);
-        // Recent activity - FIXED: Use correct field names
         const recentActivity = await this.Application.find({
             job: { $in: jobIds },
         })
@@ -798,7 +697,6 @@ export class CandidateService {
             .limit(5)
             .populate("user", "name email profile")
             .populate("job", "title");
-        // Calculate average time to hire
         const hiredApplications = applications.filter((a) => a.status === ApplicationStatus.HIRED && a.createdAt && a.updatedAt);
         let averageTimeToHire = 0;
         if (hiredApplications.length > 0) {
@@ -837,15 +735,11 @@ export class CandidateService {
             timestamp: new Date().toISOString(),
         };
     }
-    /**
-     * Get shortlisted candidates for an employer
-     */
     async getShortlistedCandidates(employerId, options = {}) {
         try {
             console.log(`📊 Fetching shortlisted candidates for employer: ${employerId}`);
             const { page = 1, limit = 10, search = "", jobId, sortBy = "updatedAt", sortOrder = "desc", } = options;
             const skip = (page - 1) * limit;
-            // 1. Get all jobs posted by this employer
             const employerJobs = await this.Job.find({
                 $or: [
                     { postedBy: employerId },
@@ -866,23 +760,19 @@ export class CandidateService {
                     },
                 };
             }
-            // 2. Build query for shortlisted candidates
             const query = {
                 jobId: { $in: jobIds },
-                status: { $in: ["shortlisted", "interview_scheduled"] }, // Shortlisted or interview
+                status: { $in: ["shortlisted", "interview_scheduled"] },
             };
-            // Add job filter if specified
             if (jobId) {
                 query.jobId = jobId;
             }
-            // Add search filter
             if (search) {
                 const userIds = await this.getUserIdsBySearch(search);
                 if (userIds.length > 0) {
                     query.userId = { $in: userIds };
                 }
             }
-            // 3. Get shortlisted candidates with pagination
             const [candidates, total] = await Promise.all([
                 this.Application.find(query)
                     .populate("userId", "name email phone location")
@@ -893,9 +783,7 @@ export class CandidateService {
                     .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 }),
                 this.Application.countDocuments(query),
             ]);
-            // 4. Get summary statistics
             const summary = await this.getShortlistedSummary(jobIds, jobId);
-            // 5. Format candidates
             const formattedCandidates = candidates.map((app) => ({
                 _id: app._id,
                 user: {
@@ -923,7 +811,7 @@ export class CandidateService {
                 aiRecommendation: app.aiRecommendation,
                 aiStrengths: app.aiStrengths,
                 aiWeaknesses: app.aiWeaknesses,
-                statusHistory: app.statusHistory?.slice(-5) || [], // Last 5 status changes
+                statusHistory: app.statusHistory?.slice(-5) || [],
                 createdAt: app.createdAt,
                 updatedAt: app.updatedAt,
             }));
@@ -938,9 +826,6 @@ export class CandidateService {
             throw error;
         }
     }
-    /**
-     * Get shortlisted candidates summary
-     */
     async getShortlistedSummary(jobIds, jobId) {
         const match = {
             jobId: { $in: jobIds },
@@ -949,9 +834,7 @@ export class CandidateService {
         if (jobId) {
             match.jobId = jobId;
         }
-        // Get total count
         const totalShortlisted = await this.Application.countDocuments(match);
-        // Get count by job
         const byJob = await this.Application.aggregate([
             { $match: match },
             {
@@ -979,7 +862,6 @@ export class CandidateService {
             },
             { $sort: { count: -1 } },
         ]);
-        // Get count by stage
         const byStage = await this.Application.aggregate([
             { $match: match },
             {
@@ -1009,9 +891,6 @@ export class CandidateService {
             })),
         };
     }
-    /**
-     * Helper: Get user IDs by search term
-     */
     async getUserIdsBySearch(search) {
         const users = await this.User.find({
             $or: [
@@ -1021,15 +900,11 @@ export class CandidateService {
         }).select("_id");
         return users.map((user) => user._id);
     }
-    /**
-     * Get applications for shortlisted candidates
-     */
     async getShortlistedApplications(employerId, options = {}) {
         try {
             console.log(`📊 Fetching shortlisted applications for employer: ${employerId}`);
             const { page = 1, limit = 10, search = "", jobId, status, stage, sortBy = "updatedAt", sortOrder = "desc", startDate, endDate, } = options;
             const skip = (page - 1) * limit;
-            // 1. Get all jobs posted by this employer
             const employerJobs = await this.Job.find({
                 $or: [
                     { postedBy: employerId },
@@ -1053,24 +928,19 @@ export class CandidateService {
                     },
                 };
             }
-            // 2. Build query
             const query = {
                 jobId: { $in: jobIds },
                 status: { $in: ["shortlisted", "interview_scheduled"] },
             };
-            // Add job filter
             if (jobId) {
                 query.jobId = jobId;
             }
-            // Add status filter
             if (status) {
                 query.status = status;
             }
-            // Add stage filter
             if (stage) {
                 query.stage = stage;
             }
-            // Add date range filter
             if (startDate || endDate) {
                 query.createdAt = {};
                 if (startDate)
@@ -1078,14 +948,12 @@ export class CandidateService {
                 if (endDate)
                     query.createdAt.$lte = new Date(endDate);
             }
-            // Add search filter
             if (search) {
                 const userIds = await this.getUserIdsBySearch(search);
                 if (userIds.length > 0) {
                     query.userId = { $in: userIds };
                 }
             }
-            // 3. Get applications with pagination and sorting
             const [applications, total] = await Promise.all([
                 this.Application.find(query)
                     .populate("userId", "name email phone location profileImage")
@@ -1096,7 +964,6 @@ export class CandidateService {
                     .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 }),
                 this.Application.countDocuments(query),
             ]);
-            // 4. Get summary statistics
             const summary = await this.getShortlistedApplicationsSummary(jobIds, {
                 jobId,
                 status,
@@ -1104,9 +971,7 @@ export class CandidateService {
                 startDate,
                 endDate,
             });
-            // 5. Format applications
             const formattedApplications = await Promise.all(applications.map(async (app) => {
-                // Get interview schedule if exists
                 let interviewDetails = null;
                 if (app.interviewSchedule) {
                     interviewDetails = {
@@ -1166,9 +1031,6 @@ export class CandidateService {
             throw error;
         }
     }
-    /**
-     * Get shortlisted applications summary
-     */
     async getShortlistedApplicationsSummary(jobIds, filters) {
         const match = {
             jobId: { $in: jobIds },
@@ -1187,9 +1049,7 @@ export class CandidateService {
             if (filters.endDate)
                 match.createdAt.$lte = new Date(filters.endDate);
         }
-        // Get total count
         const totalShortlisted = await this.Application.countDocuments(match);
-        // Get count by status
         const byStatus = await this.Application.aggregate([
             { $match: match },
             {
@@ -1207,7 +1067,6 @@ export class CandidateService {
             },
             { $sort: { count: -1 } },
         ]);
-        // Get count by job
         const byJob = await this.Application.aggregate([
             { $match: match },
             {
@@ -1235,7 +1094,6 @@ export class CandidateService {
             },
             { $sort: { count: -1 } },
         ]);
-        // Get count by stage
         const byStage = await this.Application.aggregate([
             { $match: match },
             {
@@ -1253,7 +1111,6 @@ export class CandidateService {
             },
             { $sort: { count: -1 } },
         ]);
-        // Get average AI score
         const scoreResult = await this.Application.aggregate([
             { $match: { ...match, aiScore: { $exists: true } } },
             {
@@ -1284,13 +1141,9 @@ export class CandidateService {
             totalWithAI,
         };
     }
-    /**
-     * Get resume for a shortlisted candidate
-     */
     async getShortlistedCandidateResume(candidateId, employerId, format = "pdf") {
         try {
             console.log(`📄 Fetching resume for shortlisted candidate: ${candidateId}`);
-            // 1. Find the application
             const application = await this.Application.findById(candidateId)
                 .populate("userId", "name email")
                 .populate("jobId", "title company")
@@ -1299,7 +1152,6 @@ export class CandidateService {
                 console.log(`❌ Application not found: ${candidateId}`);
                 return null;
             }
-            // 2. Verify the job belongs to this employer
             const job = await this.Job.findOne({
                 _id: application.jobId,
                 $or: [
@@ -1313,15 +1165,12 @@ export class CandidateService {
                 console.log(`❌ Job not found or access denied for employer: ${employerId}`);
                 return null;
             }
-            // 3. Check if candidate is shortlisted
             if (!["shortlisted", "interview_scheduled"].includes(application.status)) {
                 console.log(`❌ Candidate is not shortlisted. Status: ${application.status}`);
                 return null;
             }
-            // 4. Get the resume
             let resume = application.resumeId;
             if (!resume) {
-                // Try to find resume by userId
                 resume = await this.Resume.findOne({ userId: application.userId });
             }
             if (!resume) {
@@ -1329,7 +1178,6 @@ export class CandidateService {
                 return null;
             }
             console.log(`✅ Resume found: ${resume.title || "Untitled"}`);
-            // 5. Prepare response based on format
             const metadata = {
                 candidateName: application.userId?.name || "Unknown",
                 candidateEmail: application.userId?.email || "Unknown",
@@ -1341,7 +1189,6 @@ export class CandidateService {
                 updatedAt: resume.updatedAt,
             };
             if (format === "json") {
-                // Return full resume data as JSON
                 return {
                     resume: {
                         _id: resume._id,
@@ -1364,7 +1211,6 @@ export class CandidateService {
                 };
             }
             if (format === "url") {
-                // Return URL to the resume file
                 const resumeUrl = resume.pdfUrl || resume.fileUrl || resume.cloudStorageUrl;
                 if (!resumeUrl) {
                     console.log(`❌ No URL found for resume`);
@@ -1378,7 +1224,6 @@ export class CandidateService {
                     metadata,
                 };
             }
-            // Default: Return PDF
             if (resume.pdfFile) {
                 return {
                     resume: resume.pdfFile,
@@ -1390,7 +1235,6 @@ export class CandidateService {
             }
             if (resume.pdfUrl || resume.fileUrl || resume.cloudStorageUrl) {
                 const resumeUrl = resume.pdfUrl || resume.fileUrl || resume.cloudStorageUrl;
-                // If we have a URL, redirect or return it
                 return {
                     resume: null,
                     fileName: `${application.userId?.name || "candidate"}_resume.pdf`,
@@ -1399,10 +1243,7 @@ export class CandidateService {
                     metadata,
                 };
             }
-            // If we have file path, read and return
             if (resume.filePath) {
-                // You might want to implement file reading here
-                // For now, return the path
                 return {
                     resume: resume.filePath,
                     fileName: `${application.userId?.name || "candidate"}_resume.pdf`,
@@ -1418,13 +1259,9 @@ export class CandidateService {
             throw error;
         }
     }
-    /**
-     * Get multiple shortlisted candidate resumes
-     */
     async getShortlistedCandidateResumes(employerId, options = {}) {
         try {
             const { jobId, candidateIds, format = "pdf", limit = 10 } = options;
-            // 1. Get all jobs posted by this employer
             const employerJobs = await this.Job.find({
                 $or: [
                     { postedBy: employerId },
@@ -1434,7 +1271,6 @@ export class CandidateService {
                 isDeleted: { $ne: true },
             }).select("_id");
             const jobIds = employerJobs.map((job) => job._id);
-            // 2. Build query
             const query = {
                 jobId: { $in: jobIds },
                 status: { $in: ["shortlisted", "interview_scheduled"] },
@@ -1445,18 +1281,15 @@ export class CandidateService {
             if (candidateIds && candidateIds.length > 0) {
                 query._id = { $in: candidateIds };
             }
-            // 3. Get applications
             const applications = await this.Application.find(query)
                 .populate("userId", "name email")
                 .populate("jobId", "title")
                 .limit(limit)
                 .sort({ updatedAt: -1 });
-            // 4. Get resumes for each application
             const resumes = await Promise.all(applications.map(async (app) => {
                 const result = await this.getShortlistedCandidateResume(app._id.toString(), employerId, format);
                 return result;
             }));
-            // Filter out null results
             const validResumes = resumes.filter((r) => r !== null);
             return {
                 resumes: validResumes,

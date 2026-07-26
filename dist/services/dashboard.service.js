@@ -6,7 +6,6 @@ import User from "../models/User.models";
 import { AppError } from "../utils/errorHandler";
 import companyService from "./company.service";
 import jobService from "./job.service";
-// ==================== MERGED SERVICE ====================
 class DashboardService {
     Job;
     Application;
@@ -20,12 +19,6 @@ class DashboardService {
         this.Resume = Resume;
         this.User = User;
     }
-    // ============================================================
-    // 1. DASHBOARD STATS
-    // ============================================================
-    /**
-     * Get comprehensive dashboard statistics
-     */
     async getDashboardStats(employerId) {
         const company = await this.Company.findOne({
             ownerId: employerId,
@@ -62,7 +55,6 @@ class DashboardService {
             averageAIScore: screenedApps.length > 0 ? totalAIScore / screenedApps.length : 0,
             recentActivities: [],
         };
-        // Get recent activities
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const recentApps = applications
@@ -81,9 +73,6 @@ class DashboardService {
         }));
         return stats;
     }
-    // ============================================================
-    // 2. AI SCREENING DATA
-    // ============================================================
     async getAIScreeningData(employerId) {
         const jobs = await jobService.getJobsByEmployer(employerId);
         const jobIds = jobs.map((job) => job._id);
@@ -128,9 +117,6 @@ class DashboardService {
             pendingScreening,
         };
     }
-    /**
-     * Export dashboard data
-     */
     async exportDashboard(employerId, format = "csv", type = "summary") {
         const company = await companyService.getCompanyByOwnerId(employerId);
         const jobs = await jobService.getJobsByEmployer(employerId);
@@ -178,9 +164,6 @@ class DashboardService {
             exportedAt: new Date().toISOString(),
         };
     }
-    // ============================================================
-    // 9. HELPER METHODS
-    // ============================================================
     getTimeAgo(date) {
         const now = new Date();
         const diffMs = now.getTime() - new Date(date).getTime();

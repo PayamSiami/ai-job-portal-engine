@@ -13,14 +13,7 @@ import { asyncHandler } from "./base.controller";
 import jobService from "../services/job.service";
 import { buildResumeContent } from "../utils/buildResumeContent";
 import { getCompanyNameFromJob } from "../utils/companyHelper";
-/**
- * Resume Controller
- * Handles all resume CRUD operations
- */
 class ResumeController {
-    /**
-     * Get all resumes for authenticated user with pagination and filtering
-     */
     getUserResumes = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -37,9 +30,6 @@ class ResumeController {
             pagination: result.pagination,
         }, "Resumes fetched successfully");
     });
-    /**
-     * Get a single resume by ID
-     */
     getResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -55,9 +45,6 @@ class ResumeController {
         }
         sendSuccess(res, resume, "Resume fetched successfully");
     });
-    /**
-     * Create a new resume
-     */
     createResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -70,9 +57,6 @@ class ResumeController {
         const resume = await resumeService.createResume(userId, resumeData);
         sendSuccess(res, resume, "Resume created successfully", 201);
     });
-    /**
-     * Update an existing resume
-     */
     updateResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -82,7 +66,6 @@ class ResumeController {
         if (!resumeId) {
             throw new AppError("Invalid resume ID", 400);
         }
-        // Check if resume exists
         const existingResume = await resumeService.getResume(resumeId, userId);
         if (!existingResume) {
             throw new AppError("Resume not found", 404);
@@ -91,9 +74,6 @@ class ResumeController {
         const updatedResume = await resumeService.updateResume(resumeId, userId, updateData);
         sendSuccess(res, updatedResume, "Resume updated successfully");
     });
-    /**
-     * Delete a resume
-     */
     deleteResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -103,7 +83,6 @@ class ResumeController {
         if (!resumeId) {
             throw new AppError("Invalid resume ID", 400);
         }
-        // Check if resume exists
         const existingResume = await resumeService.getResume(resumeId, userId);
         if (!existingResume) {
             throw new AppError("Resume not found", 404);
@@ -111,9 +90,6 @@ class ResumeController {
         await resumeService.deleteResume(resumeId, userId);
         sendSuccess(res, null, "Resume deleted successfully");
     });
-    /**
-     * Duplicate an existing resume
-     */
     duplicateResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -123,7 +99,6 @@ class ResumeController {
         if (!resumeId) {
             throw new AppError("Invalid resume ID", 400);
         }
-        // Check if source resume exists
         const sourceResume = await resumeService.getResume(resumeId, userId);
         if (!sourceResume) {
             throw new AppError("Source resume not found", 404);
@@ -131,9 +106,6 @@ class ResumeController {
         const duplicatedResume = await resumeService.duplicateResume(resumeId, userId);
         sendSuccess(res, duplicatedResume, "Resume duplicated successfully", 201);
     });
-    /**
-     * Set a resume as default
-     */
     setDefaultResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -143,7 +115,6 @@ class ResumeController {
         if (!resumeId) {
             throw new AppError("Invalid resume ID", 400);
         }
-        // Check if resume exists
         const existingResume = await resumeService.getResume(resumeId, userId);
         if (!existingResume) {
             throw new AppError("Resume not found", 404);
@@ -151,9 +122,6 @@ class ResumeController {
         const updatedResume = await resumeService.setDefaultResume(resumeId, userId);
         sendSuccess(res, updatedResume, "Default resume updated successfully");
     });
-    /**
-     * Download resume as PDF
-     */
     downloadResumePDF = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -163,20 +131,16 @@ class ResumeController {
         if (!resumeId) {
             throw new AppError("Invalid resume ID", 400);
         }
-        // Check if resume exists and user has access
         const resume = await resumeService.getResume(resumeId, userId);
         if (!resume) {
             throw new AppError("Resume not found", 404);
         }
-        // Get PDF path
         const pdfPath = pdfService.getPDFPath(resumeId);
         if (!pdfPath || !fs.existsSync(pdfPath)) {
             throw new AppError("PDF file not found", 404);
         }
-        // Read and send file
         const fileBuffer = fs.readFileSync(pdfPath);
         const stats = fs.statSync(pdfPath);
-        // Sanitize filename
         const filename = `resume-${resume.title?.replace(/[^a-zA-Z0-9]/g, "-") || "untitled"}.pdf`;
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -184,9 +148,6 @@ class ResumeController {
         res.send(fileBuffer);
         logger.info("PDF downloaded successfully", { resumeId, userId });
     });
-    /**
-     * Get resume statistics
-     */
     getResumeStats = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -195,9 +156,6 @@ class ResumeController {
         const stats = await resumeService.getUserResumeStats(userId);
         sendSuccess(res, stats, "Resume statistics fetched successfully");
     });
-    /**
-     * Bulk delete resumes
-     */
     bulkDeleteResumes = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -210,7 +168,6 @@ class ResumeController {
         if (resumeIds.length > 50) {
             throw new AppError("Cannot delete more than 50 resumes at once", 400);
         }
-        // Validate each ID
         for (const id of resumeIds) {
             if (!id.match(/^[0-9a-fA-F]{24}$/)) {
                 throw new AppError(`Invalid resume ID format: ${id}`, 400);
@@ -222,9 +179,6 @@ class ResumeController {
             failedIds: result.failedIds,
         }, `${result.deletedCount} resumes deleted successfully`);
     });
-    /**
-     * Export resume data
-     */
     exportResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -246,7 +200,6 @@ class ResumeController {
             return;
         }
         if (format === "pdf") {
-            // Generate fresh PDF
             const pdfBuffer = await pdfService.generateResumePDF(resume);
             const filename = `resume-${resume.title?.replace(/[^a-zA-Z0-9]/g, "-") || "export"}.pdf`;
             res.setHeader("Content-Type", "application/pdf");
@@ -256,10 +209,6 @@ class ResumeController {
         }
         throw new AppError("Unsupported export format. Use 'json' or 'pdf'", 400);
     });
-    /**
-     * Analyze resume against a job description
-     * GET /api/resumes/:id/analyze
-     */
     analyzeResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         const resumeId = getStringParam(req.params.id);
@@ -312,10 +261,6 @@ class ResumeController {
             analysis,
         }, "Resume analysis completed successfully");
     });
-    /**
-     * Generate cover letter for a job
-     * POST /api/resumes/:id/generate-cover-letter
-     */
     generateCoverLetter = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         const { jobId } = req.body;
@@ -348,10 +293,6 @@ class ResumeController {
         }, content);
         sendSuccess(res, { coverLetter }, "Cover letter generated successfully");
     });
-    /**
-     * Get career feedback
-     * GET /api/resumes/:id/career-feedback
-     */
     getCareerFeedback = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -369,10 +310,6 @@ class ResumeController {
         const feedback = await careerFeedbackService.generateCareerFeedback(content);
         sendSuccess(res, { feedback }, "Career feedback generated successfully");
     });
-    /**
-     * Get job match recommendations
-     * GET /api/resumes/:id/job-matches
-     */
     getJobMatches = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         const resumeId = getStringParam(req.params.id);
@@ -387,11 +324,8 @@ class ResumeController {
         if (!resume) {
             throw new AppError("Resume not found", 404);
         }
-        // Build content from structured resume data
         const content = buildResumeContent(resume);
-        // Get all active jobs
         const jobs = await jobService.getActiveJobs();
-        // Map jobs to the format expected by the recommender
         const mappedJobs = jobs.map((job) => ({
             id: job._id?.toString(),
             title: job.title || "",
@@ -410,9 +344,7 @@ class ResumeController {
             industry: job.industry,
             companySize: job.companySize,
         }));
-        // Get job matches with filters
         const matches = await jobMatchRecommenderService.getJobMatches(content, mappedJobs);
-        // Enrich matches with additional details
         const enrichedMatches = matches.map((match) => ({
             ...match,
             matchDetails: {
@@ -442,10 +374,6 @@ class ResumeController {
             },
         }, "Job matches found successfully");
     });
-    /**
-     * Get resume improvement suggestions
-     * GET /api/resumes/:id/improvements
-     */
     getImprovementSuggestions = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         const resumeId = getStringParam(req.params.id);

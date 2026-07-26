@@ -8,7 +8,6 @@ export class CompanyController {
         if (!data.name) {
             throw new AppError("Company name is required", 400);
         }
-        // Check if employer already has a company
         const existingCompany = await companyService.hasCompany(userId);
         if (existingCompany) {
             throw new AppError("You already have a company registered", 400);

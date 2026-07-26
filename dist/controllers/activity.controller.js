@@ -3,15 +3,7 @@ import { sendSuccess } from "../utils/responseFormatter";
 import { AppError } from "../utils/errorHandler";
 import { asyncHandler } from "./base.controller";
 import activityService from "../services/activity.service";
-/**
- * Dashboard Controller
- * Handles all dashboard, analytics, candidate, and company management
- */
 class ActivityController {
-    /**
-     * Get activities with filters and pagination
-     * GET /api/dashboard/activities
-     */
     getActivities = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -35,10 +27,6 @@ class ActivityController {
             pagination: result.pagination,
         }, "Activities fetched successfully");
     });
-    /**
-     * Get activity statistics
-     * GET /api/dashboard/activities/stats
-     */
     getActivityStats = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {

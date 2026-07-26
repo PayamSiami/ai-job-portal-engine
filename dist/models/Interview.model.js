@@ -1,6 +1,4 @@
-// backend/src/models/Interview.model.ts
 import mongoose, { Schema } from "mongoose";
-// ==================== Enums ====================
 export var InterviewStatus;
 (function (InterviewStatus) {
     InterviewStatus["SCHEDULED"] = "scheduled";
@@ -19,9 +17,7 @@ export var InterviewType;
     InterviewType["HR"] = "hr";
     InterviewType["PANEL"] = "panel";
 })(InterviewType || (InterviewType = {}));
-// ==================== Schema ====================
 const InterviewSchema = new Schema({
-    // Relations
     application: {
         type: Schema.Types.ObjectId,
         ref: "Application",
@@ -50,7 +46,6 @@ const InterviewSchema = new Schema({
             required: true,
         },
     ],
-    // Interview Details
     title: {
         type: String,
         required: true,
@@ -71,7 +66,6 @@ const InterviewSchema = new Schema({
         default: InterviewStatus.SCHEDULED,
         index: true,
     },
-    // Schedule
     scheduledDate: {
         type: Date,
         required: true,
@@ -88,7 +82,6 @@ const InterviewSchema = new Schema({
         type: String,
         default: "UTC",
     },
-    // Location
     location: {
         type: String,
         trim: true,
@@ -109,7 +102,6 @@ const InterviewSchema = new Schema({
         type: String,
         trim: true,
     },
-    // Feedback
     feedback: {
         type: String,
         maxlength: 5000,
@@ -127,7 +119,6 @@ const InterviewSchema = new Schema({
         type: String,
         enum: ["hire", "no-hire", "undecided"],
     },
-    // History
     statusHistory: [
         {
             status: {
@@ -175,14 +166,12 @@ const InterviewSchema = new Schema({
             },
         },
     ],
-    // Timestamps
     completedAt: {
         type: Date,
     },
     cancelledAt: {
         type: Date,
     },
-    // Metadata
     calendarEventId: {
         type: String,
         trim: true,
@@ -199,14 +188,11 @@ const InterviewSchema = new Schema({
     toJSON: { virtuals: true, versionKey: false },
     toObject: { virtuals: true, versionKey: false },
 });
-// ==================== Indexes ====================
-// For efficient queries
 InterviewSchema.index({ candidate: 1, scheduledDate: -1 });
 InterviewSchema.index({ interviewerIds: 1, scheduledDate: -1 });
 InterviewSchema.index({ status: 1, scheduledDate: 1 });
 InterviewSchema.index({ company: 1, scheduledDate: -1 });
 InterviewSchema.index({ application: 1 });
-// ==================== Virtuals ====================
 InterviewSchema.virtual("isUpcoming").get(function () {
     return (this.scheduledDate > new Date() && this.status === InterviewStatus.SCHEDULED);
 });
@@ -216,14 +202,12 @@ InterviewSchema.virtual("isPast").get(function () {
 InterviewSchema.virtual("canReschedule").get(function () {
     return [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED].includes(this.status);
 });
-// ==================== Methods ====================
 InterviewSchema.methods.getDurationInHours = function () {
     return this.duration / 60;
 };
 InterviewSchema.methods.formatDate = function () {
     return new Date(this.scheduledDate).toLocaleString();
 };
-// ==================== Statics ====================
 InterviewSchema.statics.findUpcomingForCandidate = function (candidate) {
     return this.find({
         candidate,
@@ -241,6 +225,5 @@ InterviewSchema.statics.findTodayInterviews = function () {
         scheduledDate: { $gte: start, $lte: end },
     }).populate("candidate", "name email phone");
 };
-// ==================== Model ====================
 export const Interview = mongoose.model("Interview", InterviewSchema);
 export default Interview;

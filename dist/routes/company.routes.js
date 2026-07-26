@@ -4,7 +4,6 @@ import { CompanyController } from "../controllers/company.controller";
 import { authorize, protect } from "../middleware/authMiddleware";
 const router = express.Router();
 const companyController = new CompanyController();
-// Multer configuration
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, "uploads/companies/");
@@ -16,7 +15,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
     storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         if (file.mimetype.startsWith("image/")) {
             cb(null, true);
@@ -26,9 +25,7 @@ const upload = multer({
         }
     },
 });
-// All routes require authentication
 router.use(protect);
-// Company CRUD
 router.post("/", authorize("employer"), companyController.createCompany);
 router.get("/", companyController.getCompany);
 router.get("/check", companyController.checkCompany);

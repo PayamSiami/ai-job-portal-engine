@@ -1,9 +1,7 @@
-// src/services/jobMatchRecommender.service.ts
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import hashString from "../../utils/hashString";
-// ============ Service Class ============
 class JobMatchRecommenderService {
     genAI;
     model;
@@ -12,7 +10,7 @@ class JobMatchRecommenderService {
     MAX_JOBS_PER_BATCH = 10;
     DEFAULT_MIN_SCORE = 30;
     CONCURRENCY_LIMIT = 3;
-    DEFAULT_CACHE_TTL = 3600; // 1 hour
+    DEFAULT_CACHE_TTL = 3600;
     constructor() {
         const apiKey = config.GEMINI_API_KEY;
         if (!apiKey) {
@@ -29,26 +27,18 @@ class JobMatchRecommenderService {
             model: config.GEMINI_MODEL,
             generationConfig,
         });
-        // Initialize cache
         this.cache = new NodeCache({
             stdTTL: this.DEFAULT_CACHE_TTL,
             checkperiod: 120,
         });
     }
-    /**
-     * Find jobs that match the user's resume with detailed scoring
-     */
     async getJobMatches(resumeText, availableJobs, options = {}) {
         const startTime = Date.now();
         const { retryCount = 2, minScore = this.DEFAULT_MIN_SCORE, includeBreakdown = true, batchSize = this.MAX_JOBS_PER_BATCH, concurrency = this.CONCURRENCY_LIMIT, useCache = true, } = options;
-        // Validate inputs
         this.validateInputs(resumeText, availableJobs);
         try {
-            // Extract candidate profile
             const candidateProfile = await this.extractCandidateProfile(resumeText, retryCount, useCache);
-            // Score jobs in batches with concurrency control
             const jobScores = await this.scoreJobsInBatches(candidateProfile, availableJobs, batchSize, concurrency, retryCount, includeBreakdown, useCache, startTime);
-            // Filter and sort results
             const filteredResults = jobScores
                 .filter((result) => result.matchScore >= minScore)
                 .sort((a, b) => b.matchScore - a.matchScore);
@@ -59,14 +49,9 @@ class JobMatchRecommenderService {
             return this.getFallbackResults(availableJobs, error);
         }
     }
-    /**
-     * Extract candidate profile from resume
-     */
     async extractCandidateProfile(resumeText, retryCount, useCache) {
         const truncatedResume = this.truncateText(resumeText, this.MAX_RESUME_LENGTH);
-        // Generate cache key
         const cacheKey = `profile:${hashString(truncatedResume)}`;
-        // Check cache
         if (useCache) {
             const cached = this.cache.get(cacheKey);
             if (cached) {
@@ -100,7 +85,6 @@ class JobMatchRecommenderService {
                 const result = await this.model.generateContent(profilePrompt);
                 const cleanedText = this.cleanAIResponse(result.response.text());
                 const profile = this.parseCandidateProfile(cleanedText);
-                // Store in cache
                 if (useCache) {
                     this.cache.set(cacheKey, profile);
                 }
@@ -116,15 +100,10 @@ class JobMatchRecommenderService {
         }
         throw new Error(`Failed to extract candidate profile: ${lastError?.message}`);
     }
-    /**
-     * Score jobs in batches with concurrency control
-     */
     async scoreJobsInBatches(candidateProfile, jobs, batchSize, concurrency, retryCount, includeBreakdown, useCache, startTime) {
         const results = [];
-        // Process jobs in batches
         for (let i = 0; i < jobs.length; i += batchSize) {
             const batch = jobs.slice(i, i + batchSize);
-            // Check cache for each job in batch
             const batchWithCache = batch.map((job) => {
                 if (useCache) {
                     const cacheKey = this.generateJobMatchCacheKey(candidateProfile, job, includeBreakdown);
@@ -135,9 +114,7 @@ class JobMatchRecommenderService {
                 }
                 return { job, cachedResult: null };
             });
-            // Process uncached jobs
             const uncachedJobs = batchWithCache.filter((item) => !item.cachedResult);
-            // ✅ FIX: Properly handle cached results with complete metadata
             const cachedResults = batchWithCache
                 .filter((item) => item.cachedResult)
                 .map((item) => {
@@ -154,27 +131,19 @@ class JobMatchRecommenderService {
                     },
                 };
             });
-            // Process uncached jobs with concurrency
             const batchPromises = uncachedJobs.map(({ job }, index) => this.scoreJobWithRetry(candidateProfile, job, retryCount, includeBreakdown, i + index, useCache, startTime));
-            // Process with concurrency limit
             const batchResults = await this.processWithConcurrency(batchPromises, concurrency);
-            // Combine cached and new results
             const validResults = batchResults.filter((r) => r !== null);
             results.push(...cachedResults, ...validResults);
         }
         return results;
     }
-    /**
-     * Score a single job with retry logic
-     */
     async scoreJobWithRetry(candidateProfile, job, retryCount, includeBreakdown, jobIndex, useCache, startTime) {
-        // Check cache first
         if (useCache) {
             const cacheKey = this.generateJobMatchCacheKey(candidateProfile, job, includeBreakdown);
             const cached = this.cache.get(cacheKey);
             if (cached) {
                 console.log(`Job ${jobIndex + 1} retrieved from cache`);
-                // ✅ FIX: Ensure metadata exists when returning cached result
                 return {
                     ...cached,
                     metadata: {
@@ -196,7 +165,6 @@ class JobMatchRecommenderService {
                 const cleanedText = this.cleanAIResponse(result.response.text());
                 const matchData = this.parseMatchResult(cleanedText, job, includeBreakdown, startTime);
                 console.log(`Job ${jobIndex + 1} scored: ${matchData.matchScore}%`);
-                // Store in cache
                 if (useCache) {
                     const cacheKey = this.generateJobMatchCacheKey(candidateProfile, job, includeBreakdown);
                     this.cache.set(cacheKey, matchData);
@@ -213,9 +181,6 @@ class JobMatchRecommenderService {
         console.error(`Failed to score job "${job.title}" after ${retryCount} retries:`, lastError);
         return null;
     }
-    /**
-     * Get fallback results when matching fails
-     */
     getFallbackResults(jobs, error) {
         return jobs.map((job) => ({
             job,
@@ -232,9 +197,6 @@ class JobMatchRecommenderService {
             },
         }));
     }
-    /**
-     * Build the match scoring prompt
-     */
     buildMatchPrompt(candidateProfile, job, includeBreakdown) {
         return `
       Score how well this candidate matches the job opening.
@@ -294,9 +256,6 @@ class JobMatchRecommenderService {
       Be honest and specific in your assessment. Consider both the candidate's profile and job requirements.
     `;
     }
-    /**
-     * Parse candidate profile from AI response
-     */
     parseCandidateProfile(cleanedText) {
         const parsed = JSON.parse(cleanedText);
         return {
@@ -318,15 +277,11 @@ class JobMatchRecommenderService {
             industries: Array.isArray(parsed.industries) ? parsed.industries : [],
         };
     }
-    /**
-     * Parse match result from AI response
-     */
     parseMatchResult(cleanedText, job, includeBreakdown, startTime) {
         const parsed = JSON.parse(cleanedText);
         if (typeof parsed.matchScore !== "number") {
             throw new Error("Invalid match score in response");
         }
-        // ✅ FIX: Always include metadata with all required fields
         const metadata = {
             processingTime: Date.now() - startTime,
             modelUsed: config.GEMINI_MODEL,
@@ -360,9 +315,6 @@ class JobMatchRecommenderService {
         }
         return result;
     }
-    /**
-     * Generate job match cache key
-     */
     generateJobMatchCacheKey(candidateProfile, job, includeBreakdown) {
         const data = {
             skills: candidateProfile.skills.slice(0, 10),
@@ -375,9 +327,6 @@ class JobMatchRecommenderService {
         };
         return `match:${hashString(JSON.stringify(data))}`;
     }
-    /**
-     * Process promises with concurrency limit
-     */
     async processWithConcurrency(promises, concurrency) {
         const results = [];
         const executing = [];
@@ -397,9 +346,6 @@ class JobMatchRecommenderService {
         await Promise.all(executing);
         return results;
     }
-    /**
-     * Validate work mode
-     */
     validateWorkMode(mode) {
         const validModes = ["remote", "hybrid", "on-site"];
         if (mode && validModes.includes(mode.toLowerCase())) {
@@ -407,9 +353,6 @@ class JobMatchRecommenderService {
         }
         return null;
     }
-    /**
-     * Validate match quality
-     */
     validateMatchQuality(quality) {
         const validQualities = ["high", "medium", "low"];
         if (quality && validQualities.includes(quality.toLowerCase())) {
@@ -417,9 +360,6 @@ class JobMatchRecommenderService {
         }
         return "medium";
     }
-    /**
-     * Clean AI response text
-     */
     cleanAIResponse(responseText) {
         return responseText
             .replace(/```json\s*/g, "")
@@ -428,9 +368,6 @@ class JobMatchRecommenderService {
             .replace(/[^}]*$/, "")
             .trim();
     }
-    /**
-     * Validate inputs
-     */
     validateInputs(resumeText, jobs) {
         if (!resumeText || resumeText.trim().length < 50) {
             throw new Error("Resume text must be at least 50 characters");
@@ -447,32 +384,19 @@ class JobMatchRecommenderService {
             }
         });
     }
-    /**
-     * Truncate text to max length
-     */
     truncateText(text, maxLength) {
         if (text.length <= maxLength) {
             return text;
         }
         return text.substring(0, maxLength) + "... (truncated)";
     }
-    /**
-     * Delay for retry backoff
-     */
     delay(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
-    // ============ Public Utility Methods ============
-    /**
-     * Clear cache
-     */
     clearCache() {
         this.cache.flushAll();
         console.log("Job match cache cleared");
     }
-    /**
-     * Get cache statistics
-     */
     getCacheStats() {
         const keys = this.cache.keys();
         return {

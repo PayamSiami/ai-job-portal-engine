@@ -1,4 +1,3 @@
-// src/services/healthService.ts
 import mongoose from "mongoose";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../config/index";
@@ -8,7 +7,7 @@ class HealthService {
     genAI = null;
     model = null;
     lastAiCheck = null;
-    AI_CHECK_CACHE_MS = 60000; // Cache AI check for 1 minute
+    AI_CHECK_CACHE_MS = 60000;
     constructor() {
         this.initAI();
     }
@@ -23,12 +22,8 @@ class HealthService {
             }
         }
     }
-    /**
-     * Comprehensive health check for all dependencies
-     */
     async checkHealth() {
         const startTime = Date.now();
-        // Run all checks in parallel
         const [database, ai, memory, system] = await Promise.all([
             this.checkDatabase(),
             this.checkAI(),
@@ -48,18 +43,12 @@ class HealthService {
             metrics,
         };
     }
-    /**
-     * Lightweight health check for load balancers
-     */
     async checkLiveness() {
         return {
             status: "alive",
             timestamp: new Date().toISOString(),
         };
     }
-    /**
-     * Readiness check - verifies all critical dependencies
-     */
     async checkReadiness() {
         const [database, memory] = await Promise.all([
             this.checkDatabase(),
@@ -71,9 +60,6 @@ class HealthService {
             checks: { database, memory },
         };
     }
-    /**
-     * Check MongoDB connection
-     */
     async checkDatabase() {
         const startTime = Date.now();
         try {
@@ -86,7 +72,6 @@ class HealthService {
             };
             const latencyMs = Date.now() - startTime;
             if (state === 1) {
-                // Ping database to verify it's responsive
                 await mongoose.connection.db?.admin().ping();
                 return {
                     status: "healthy",
@@ -116,12 +101,8 @@ class HealthService {
             };
         }
     }
-    /**
-     * Check AI service availability
-     */
     async checkAI() {
         const startTime = Date.now();
-        // Return cached result if recent
         if (this.lastAiCheck && Date.now() - this.lastAiCheck.timestamp < this.AI_CHECK_CACHE_MS) {
             return {
                 status: this.lastAiCheck.status,
@@ -141,7 +122,6 @@ class HealthService {
             return result;
         }
         try {
-            // Simple test generation to verify API key and quota
             const result = await this.model.generateContent("Health check");
             const text = result.response.text();
             const checkResult = {
@@ -180,9 +160,6 @@ class HealthService {
             return checkResult;
         }
     }
-    /**
-     * Check memory usage
-     */
     async checkMemory() {
         const mem = process.memoryUsage();
         const totalMemory = mem.heapTotal + mem.external;
@@ -205,9 +182,6 @@ class HealthService {
             },
         };
     }
-    /**
-     * Check system resources
-     */
     async checkSystem() {
         const cpuUsage = process.cpuUsage();
         const loadAvg = process.platform !== "win32" ? os.loadavg() : [0, 0, 0];
@@ -240,9 +214,6 @@ class HealthService {
             },
         };
     }
-    /**
-     * Calculate overall status from individual checks
-     */
     calculateOverallStatus(checks) {
         const statuses = Object.values(checks).map((c) => c.status);
         if (statuses.some((s) => s === "unhealthy"))
@@ -251,9 +222,6 @@ class HealthService {
             return "degraded";
         return "healthy";
     }
-    /**
-     * Get detailed system metrics
-     */
     getSystemMetrics() {
         const mem = process.memoryUsage();
         const cpu = process.cpuUsage();
@@ -277,9 +245,6 @@ class HealthService {
             pid: process.pid,
         };
     }
-    /**
-     * Format bytes to human readable string
-     */
     formatBytes(bytes) {
         if (bytes === 0)
             return "0 B";

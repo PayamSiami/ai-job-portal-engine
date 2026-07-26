@@ -1,7 +1,5 @@
-// utils/resumeContentBuilder.ts
 export function buildResumeContent(resume) {
     const parts = [];
-    // 1. Personal Information
     if (resume.personalInfo) {
         const { personalInfo } = resume;
         parts.push('=== PERSONAL INFORMATION ===');
@@ -34,10 +32,8 @@ export function buildResumeContent(resume) {
         }
         parts.push('');
     }
-    // 2. Skills (CRITICAL - Your resume has this!)
     if (resume.skills && resume.skills.length > 0) {
         parts.push('=== SKILLS ===');
-        // Group skills by category if available
         const skillsByCategory = resume.skills.reduce((acc, skill) => {
             const category = skill.category || 'General';
             if (!acc[category])
@@ -54,12 +50,10 @@ export function buildResumeContent(resume) {
                 parts.push(`  • ${skill.name}${levelText}`);
             });
         });
-        // Also add as a comma-separated list for better AI parsing
         const skillNames = resume.skills.map((s) => s.name).join(', ');
         parts.push(`\nAll Skills: ${skillNames}`);
         parts.push('');
     }
-    // 3. Work Experience
     if (resume.experience && resume.experience.length > 0) {
         parts.push('=== WORK EXPERIENCE ===');
         resume.experience.forEach((exp) => {
@@ -81,7 +75,6 @@ export function buildResumeContent(resume) {
         });
         parts.push('');
     }
-    // 4. Education
     if (resume.education && resume.education.length > 0) {
         parts.push('=== EDUCATION ===');
         resume.education.forEach((edu) => {
@@ -100,7 +93,6 @@ export function buildResumeContent(resume) {
         });
         parts.push('');
     }
-    // 5. Certifications
     if (resume.certifications && resume.certifications.length > 0) {
         parts.push('=== CERTIFICATIONS ===');
         resume.certifications.forEach((cert) => {
@@ -116,7 +108,6 @@ export function buildResumeContent(resume) {
         });
         parts.push('');
     }
-    // 6. Languages
     if (resume.languages && resume.languages.length > 0) {
         parts.push('=== LANGUAGES ===');
         resume.languages.forEach((lang) => {
@@ -124,7 +115,6 @@ export function buildResumeContent(resume) {
         });
         parts.push('');
     }
-    // 7. Projects
     if (resume.projects && resume.projects.length > 0) {
         parts.push('=== PROJECTS ===');
         resume.projects.forEach((project) => {
@@ -143,7 +133,6 @@ export function buildResumeContent(resume) {
         });
         parts.push('');
     }
-    // 8. Custom Sections
     if (resume.customSections && resume.customSections.length > 0) {
         parts.push('=== ADDITIONAL INFORMATION ===');
         resume.customSections.forEach((section) => {
@@ -152,9 +141,7 @@ export function buildResumeContent(resume) {
         });
         parts.push('');
     }
-    // 9. Summary Section - Create a comprehensive summary
     parts.push('=== RESUME SUMMARY ===');
-    // Build a summary sentence
     const name = resume.personalInfo?.firstName && resume.personalInfo?.lastName
         ? `${resume.personalInfo.firstName} ${resume.personalInfo.lastName}`
         : 'Candidate';

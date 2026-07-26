@@ -133,7 +133,6 @@ const resumeSchema = new Schema({
     toJSON: { versionKey: false },
     toObject: { versionKey: false },
 });
-// Indexes
 resumeSchema.index({ user: 1, isDefault: 1 });
 resumeSchema.index({ user: 1, status: 1 });
 resumeSchema.index({ user: 1, createdAt: -1 });

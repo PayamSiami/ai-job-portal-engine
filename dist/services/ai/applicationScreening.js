@@ -2,7 +2,6 @@ import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import hashString from "../../utils/hashString";
-// ============ Service Class ============
 class ApplicationScreeningService {
     genAI;
     model;
@@ -32,26 +31,18 @@ class ApplicationScreeningService {
             model: config.GEMINI_MODEL,
             generationConfig,
         });
-        // ✅ Initialize cache
         this.cache = new NodeCache({
-            stdTTL: 300, // 5 minutes
-            checkperiod: 600, // Check for expired entries every 10 minutes
+            stdTTL: 300,
+            checkperiod: 600,
         });
     }
-    /**
-     * Screen a job application and provide a score with detailed feedback
-     */
     async screenApplication(resumeText, applicationData, jobDetails, options = {}) {
         const startTime = Date.now();
         const { retryCount = 2, includeBreakdown = true, customWeights, useCache = true, } = options;
-        // Validate inputs
         this.validateInputs(resumeText, applicationData, jobDetails);
-        // Use custom weights if provided, otherwise use defaults
         const weights = customWeights || this.DEFAULT_WEIGHTS;
         this.validateWeights(weights);
-        // Generate cache key
         const cacheKey = this.generateCacheKey(resumeText, applicationData, jobDetails, weights, includeBreakdown);
-        // Check cache
         if (useCache) {
             const cachedResult = this.cache.get(cacheKey);
             if (cachedResult) {
@@ -61,12 +52,10 @@ class ApplicationScreeningService {
                 return cachedResult;
             }
         }
-        // ✅ Check if AI model is available
         if (!this.model) {
             console.warn("⚠️ AI model not available. Returning fallback result.");
             return this.getFallbackResult("AI model not initialized");
         }
-        // Truncate inputs
         const truncatedResume = this.truncateText(resumeText, this.MAX_RESUME_LENGTH);
         const truncatedJobDetails = this.truncateJobDetails(jobDetails, this.MAX_JOB_DETAILS_LENGTH);
         let lastError = null;
@@ -76,14 +65,12 @@ class ApplicationScreeningService {
                 const result = await this.model.generateContent(prompt);
                 const cleanedText = this.cleanAIResponse(result.response.text());
                 const parsed = this.parseScreeningResult(cleanedText, includeBreakdown);
-                // Add metadata
                 const metadata = {
                     processingTime: Date.now() - startTime,
                     modelUsed: config.GEMINI_MODEL,
                     timestamp: new Date().toISOString(),
                     fromCache: false,
                 };
-                // Return the complete result with all required fields
                 const finalResult = {
                     score: parsed.score,
                     explanation: parsed.explanation,
@@ -93,7 +80,6 @@ class ApplicationScreeningService {
                     breakdown: parsed.breakdown,
                     metadata: metadata,
                 };
-                // Store in cache
                 if (useCache) {
                     this.cache.set(cacheKey, finalResult);
                 }
@@ -110,10 +96,6 @@ class ApplicationScreeningService {
         console.error("All screening attempts failed:", lastError);
         return this.getFallbackResult(lastError?.message);
     }
-    // ============ Cache Helper Methods ============
-    /**
-     * Generate cache key for screening results
-     */
     generateCacheKey(resumeText, applicationData, jobDetails, weights, includeBreakdown) {
         const data = {
             resumeHash: hashString(resumeText.substring(0, 500)),
@@ -133,16 +115,10 @@ class ApplicationScreeningService {
         };
         return `screening:${JSON.stringify(data)}`;
     }
-    /**
-     * Clear cache
-     */
     clearCache() {
         this.cache.flushAll();
         console.log("Screening cache cleared");
     }
-    /**
-     * Get cache statistics
-     */
     getCacheStats() {
         const keys = this.cache.keys();
         return {
@@ -151,7 +127,6 @@ class ApplicationScreeningService {
             stats: this.cache.getStats(),
         };
     }
-    // ============ Private Helper Methods ============
     buildPrompt(resumeText, applicationData, jobDetails, weights, includeBreakdown) {
         let prompt = `
       Score this job application from 0-100 based on fit for the position.
@@ -217,7 +192,6 @@ class ApplicationScreeningService {
     parseScreeningResult(cleanedText, includeBreakdown) {
         try {
             const parsed = JSON.parse(cleanedText);
-            // Validate required fields
             if (typeof parsed.score !== "number") {
                 throw new Error("Invalid score in response");
             }
@@ -228,7 +202,6 @@ class ApplicationScreeningService {
                 weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses : [],
                 recommendation: this.validateRecommendation(parsed.recommendation),
             };
-            // Add breakdown if present and requested
             if (includeBreakdown && parsed.breakdown) {
                 result.breakdown = {
                     skillsMatch: Math.min(100, Math.max(0, parsed.breakdown.skillsMatch || 0)),

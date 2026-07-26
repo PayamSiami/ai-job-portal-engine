@@ -36,9 +36,7 @@ class JobService {
     async getJobs(filters = {}, options = {}) {
         const { page = 1, limit = 10 } = options;
         const skip = (page - 1) * limit;
-        // Build query with proper typing
         const query = { isActive: true };
-        // Add filters with proper type checking
         if (filters.title) {
             query.title = { $regex: filters.title, $options: "i" };
         }
@@ -85,9 +83,6 @@ class JobService {
             },
         };
     }
-    /**
-     * Get jobs with MongoDB query
-     */
     async getJobsWithMongoQuery(where, options) {
         try {
             const { page, limit } = options;
@@ -115,14 +110,13 @@ class JobService {
             throw new AppError("Failed to get jobs", 500);
         }
     }
-    // services/job.service.ts
     async getJobById(jobId) {
         try {
             const job = await Job.findOne({
                 _id: jobId,
                 isDeleted: { $ne: true },
             })
-                .populate("company", "name logo industry location") // ✅ Populate company
+                .populate("company", "name logo industry location")
                 .populate("postedBy", "name email")
                 .lean();
             return job;
@@ -149,14 +143,10 @@ class JobService {
     async getActiveJobs() {
         return Job.find({ isActive: true }).sort({ createdAt: -1 }).exec();
     }
-    /**
-     * Generate complete job content using AI
-     */
     async generateJobContent(jobTitle) {
         if (!jobTitle || jobTitle.trim() === "") {
             throw new Error("Job title is required");
         }
-        // Check if AI model is available
         if (!this.model) {
             console.warn("⚠️ AI model not available. Using fallback content generation.");
             return this.generateFallbackJobContent(jobTitle);
@@ -187,14 +177,11 @@ class JobService {
             const result = await this.model.generateContent(prompt);
             const response = result.response;
             let text = response.text();
-            // Clean the response - remove markdown code blocks
             text = text
                 .replace(/```json\s*/g, "")
                 .replace(/```\s*/g, "")
                 .trim();
-            // Parse JSON
             const parsed = JSON.parse(text);
-            // Ensure all required fields exist
             const requiredFields = [
                 "title",
                 "company",
@@ -215,14 +202,12 @@ class JobService {
                     throw new Error(`Generated content missing required field: ${field}`);
                 }
             }
-            // Ensure arrays are properly formatted
             if (typeof parsed.tags === "string") {
                 parsed.tags = parsed.tags
                     .split(",")
                     .map((tag) => tag.trim())
                     .filter(Boolean);
             }
-            // Validate enums
             const validLevels = ["entry", "mid", "senior", "lead"];
             const validModes = ["remote", "hybrid", "on-site"];
             const validTypes = [
@@ -248,9 +233,6 @@ class JobService {
             return this.generateFallbackJobContent(jobTitle);
         }
     }
-    /**
-     * Generate fallback job content when AI is unavailable
-     */
     generateFallbackJobContent(jobTitle) {
         const companies = [
             "TechCorp Innovations",
@@ -365,7 +347,6 @@ class JobService {
             "remote work",
             "digital transformation",
         ];
-        // Generate random tags (5-10)
         const numTags = Math.floor(Math.random() * 6) + 5;
         const tags = [];
         const shuffled = [...tagOptions].sort(() => 0.5 - Math.random());
@@ -390,23 +371,17 @@ class JobService {
             tags: tags,
         };
     }
-    /**
-     * Get job statistics for employer
-     */
     async getJobStats(employerId) {
         try {
             logger.info(`📊 Fetching job stats for employer: ${employerId}`);
-            // Get all jobs for this employer
             const jobs = await Job.find({
                 postedBy: employerId,
                 isDeleted: { $ne: true },
             });
             const jobIds = jobs.map((job) => job._id);
-            // Get applications for these jobs
             const applications = await Application.find({
                 jobId: { $in: jobIds },
             });
-            // Calculate statistics
             const totalJobs = jobs.length;
             const activeJobs = jobs.filter((j) => j.isActive === true).length;
             const totalApplications = applications.length;
@@ -416,7 +391,6 @@ class JobService {
             const interviewingApplications = applications.filter((a) => a.status === "interviewing" || a.status === "INTERVIEWING").length;
             const hiredApplications = applications.filter((a) => a.status === "hired" || a.status === "HIRED").length;
             const rejectedApplications = applications.filter((a) => a.status === "rejected" || a.status === "REJECTED").length;
-            // Get applications by job
             const applicationsByJob = await Promise.all(jobs.map(async (job) => {
                 const count = await Application.countDocuments({
                     jobId: job._id,
@@ -455,22 +429,16 @@ class JobService {
             throw new AppError("Failed to get job statistics", 500);
         }
     }
-    /**
-     * Get job applications for a specific job
-     */
     async getJobApplications(jobId, employerId, options) {
         try {
             const { page, limit, status } = options;
             const skip = (page - 1) * limit;
-            // ✅ Validate jobId
             if (!Types.ObjectId.isValid(jobId)) {
                 throw new AppError("Invalid job ID format", 400);
             }
-            // ✅ Validate employerId
             if (!Types.ObjectId.isValid(employerId)) {
                 throw new AppError("Invalid employer ID format", 400);
             }
-            // ✅ Verify job belongs to employer
             const job = await Job.findOne({
                 _id: new Types.ObjectId(jobId),
                 postedBy: new Types.ObjectId(employerId),
@@ -479,16 +447,13 @@ class JobService {
             if (!job) {
                 throw new AppError("Job not found or access denied", 404);
             }
-            // ✅ Build query
             const query = {
-                jobId: new Types.ObjectId(jobId), // ✅ Use ObjectId
+                jobId: new Types.ObjectId(jobId),
             };
             if (status) {
                 query.status = status;
             }
-            // ✅ Log query for debugging
             logger.debug(`Fetching applications for job ${jobId} with status: ${status || "all"}`);
-            // ✅ Get applications with pagination
             const [applications, total] = await Promise.all([
                 Application.find(query)
                     .populate("userId", "name email profileImage phone location")
@@ -496,10 +461,9 @@ class JobService {
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limit)
-                    .lean(), // ✅ Use lean() for better performance
+                    .lean(),
                 Application.countDocuments(query),
             ]);
-            // ✅ Get application statistics
             const statusCounts = await Application.aggregate([
                 { $match: { jobId: new Types.ObjectId(jobId) } },
                 { $group: { _id: "$status", count: { $sum: 1 } } },
@@ -529,7 +493,6 @@ class JobService {
                 employerId,
                 options,
             });
-            // ✅ Check for specific errors
             if (error instanceof AppError) {
                 throw error;
             }
@@ -539,16 +502,12 @@ class JobService {
             throw new AppError("Failed to get job applications", 500);
         }
     }
-    /**
-     * Get similar jobs
-     */
     async getSimilarJobs(jobId, limit = 5) {
         try {
             const job = await Job.findById(jobId);
             if (!job) {
                 throw new AppError("Job not found", 404);
             }
-            // Find similar jobs based on title, skills, or category
             const similarJobs = await Job.find({
                 _id: { $ne: jobId },
                 isActive: true,
@@ -561,8 +520,6 @@ class JobService {
                         },
                     },
                     { skills: { $in: job.skills || [] } },
-                    // { category: job.category },
-                    // { industry: job.industry },
                 ],
             })
                 .sort({ createdAt: -1 })
@@ -575,9 +532,6 @@ class JobService {
             throw new AppError("Failed to get similar jobs", 500);
         }
     }
-    /**
-     * Bulk create jobs
-     */
     async bulkCreateJobs(employerId, jobsData) {
         try {
             const createdJobs = [];
@@ -597,9 +551,6 @@ class JobService {
             throw new AppError("Failed to bulk create jobs", 500);
         }
     }
-    /**
-     * Get job performance metrics
-     */
     async getJobPerformance(employerId, timeframe = 30) {
         const company = await Company.findOne({ ownerId: employerId });
         if (!company) {
@@ -630,7 +581,6 @@ class JobService {
             jobsByStatus[job.status || "active"] =
                 (jobsByStatus[job.status || "active"] || 0) + 1;
         });
-        // Calculate top performing jobs
         const jobPerformance = jobs.map((job) => {
             const jobApps = applications.filter((app) => app.jobId.toString() === job._id.toString());
             const hires = jobApps.filter((app) => app.status === ApplicationStatus.HIRED);
@@ -649,23 +599,20 @@ class JobService {
             activeJobs: jobs.filter((j) => j.isActive).length,
             jobsByStatus,
             applicationsPerJob: jobs.length > 0 ? applications.length / jobs.length : 0,
-            averageTimeToFill: 0, // Calculate based on job posting to hire date
+            averageTimeToFill: 0,
             topPerformingJobs,
         };
     }
     async getJobsByEmployer(employerId, options = {}) {
         try {
-            // Validate employer ID
             if (!mongoose.Types.ObjectId.isValid(employerId)) {
                 throw new Error("Invalid employer ID format");
             }
             const { page = 0, limit = 10, status, search } = options;
-            // Build query
             const query = {
                 postedBy: new mongoose.Types.ObjectId(employerId),
                 isDeleted: false,
             };
-            // Add status filter if provided
             if (status) {
                 if (status === "active") {
                     query.isActive = true;
@@ -674,7 +621,6 @@ class JobService {
                     query.isActive = false;
                 }
             }
-            // Add search filter
             if (search) {
                 query.$or = [
                     { title: { $regex: search, $options: "i" } },
@@ -682,7 +628,6 @@ class JobService {
                     { skills: { $in: [search] } },
                 ];
             }
-            // Execute query with pagination
             const jobs = await Job.find(query)
                 .populate("company", "name logo location")
                 .populate("postedBy", "username email")
@@ -697,9 +642,6 @@ class JobService {
             throw new Error(`Failed to get jobs by employer: ${error.message}`);
         }
     }
-    /**
-     * Get featured jobs
-     */
     async getFeaturedJobs(limit = 6) {
         try {
             return await Job.find({
@@ -716,9 +658,6 @@ class JobService {
             throw new AppError("Failed to get featured jobs", 500);
         }
     }
-    /**
-     * Toggle job status (active/inactive)
-     */
     async toggleJobStatus(jobId, employerId) {
         try {
             const job = await Job.findOne({
@@ -738,9 +677,6 @@ class JobService {
             throw new AppError("Failed to toggle job status", 500);
         }
     }
-    /**
-     * ✅ Delete a job (soft delete)
-     */
     async deleteJob(jobId, userId) {
         try {
             const job = await Job.findOne({
@@ -751,9 +687,7 @@ class JobService {
             if (!job) {
                 throw new AppError("Job not found or access denied", 404);
             }
-            // Soft delete
             job.isDeleted = true;
-            // job.deletedAt = new Date();
             job.isActive = false;
             await job.save();
             return job;
@@ -765,16 +699,11 @@ class JobService {
             throw new AppError("Failed to delete job", 500);
         }
     }
-    /**
-     * Update a job
-     */
     async updateJob(jobId, userId, data) {
         try {
-            // ✅ Validate jobId
             if (!Types.ObjectId.isValid(jobId)) {
                 throw new AppError("Invalid job ID format", 400);
             }
-            // Find job and verify ownership
             const job = await Job.findOne({
                 _id: new Types.ObjectId(jobId),
                 postedBy: new Types.ObjectId(userId),
@@ -783,9 +712,7 @@ class JobService {
             if (!job) {
                 throw new AppError("Job not found or access denied", 404);
             }
-            // ✅ Create a clean update object
             const updateData = {};
-            // ✅ Define allowed fields and their types
             const allowedFields = [
                 "title",
                 "description",
@@ -816,21 +743,17 @@ class JobService {
             }
             for (const field of allowedFields) {
                 if (data[field] !== undefined) {
-                    // Handle arrays
                     if (Array.isArray(data[field])) {
                         updateData[field] = data[field];
                     }
-                    // Handle strings
                     else if (typeof data[field] === "string") {
                         updateData[field] = data[field].trim();
                     }
-                    // Handle other types
                     else {
                         updateData[field] = data[field];
                     }
                 }
             }
-            // ✅ Don't allow updating protected fields
             delete updateData._id;
             delete updateData.createdAt;
             delete updateData.postedBy;
@@ -838,16 +761,14 @@ class JobService {
             delete updateData.deletedAt;
             delete updateData.views;
             delete updateData.applicationsCount;
-            // Validate we have something to update
             if (Object.keys(updateData).length === 0) {
                 throw new AppError("No valid fields to update", 400);
             }
-            // ✅ Update the job with the new option syntax
             const updatedJob = await Job.findByIdAndUpdate(jobId, { $set: updateData }, {
                 new: true,
                 runValidators: true,
                 context: "query",
-                returnDocument: "after", // ✅ Fix the deprecation warning
+                returnDocument: "after",
             })
                 .populate("company", "name logo")
                 .populate("postedBy", "name email");
@@ -866,10 +787,8 @@ class JobService {
             throw new AppError("Failed to update job. Please check your input.", 400);
         }
     }
-    // services/job.service.ts
     async getGlobalJobStats() {
         try {
-            // Get all jobs
             const jobs = await Job.find({
                 isDeleted: { $ne: true },
             }).lean();
@@ -877,18 +796,14 @@ class JobService {
             if (jobIds.length === 0) {
                 return this.getEmptyGlobalStats();
             }
-            // Get applications for all jobs
             const applications = await Application.find({
                 job: { $in: jobIds },
             }).lean();
-            // Calculate statistics
             const totalJobs = jobs.length;
             const activeJobs = jobs.filter((j) => j.isActive === true).length;
             const featuredJobs = jobs.filter((j) => j.isFeatured === true).length;
             const totalApplications = applications.length;
-            // Status counts
             const statusCounts = this.getStatusCounts(applications);
-            // Job distribution
             const jobsByType = jobs.reduce((acc, job) => {
                 const type = job.jobType || job.type || "full-time";
                 acc[type] = (acc[type] || 0) + 1;
@@ -904,7 +819,6 @@ class JobService {
                 acc[level] = (acc[level] || 0) + 1;
                 return acc;
             }, {});
-            // Top performing jobs
             const applicationsByJob = jobIds.map((jobId) => {
                 const count = applications.filter((app) => app.job.toString() === jobId.toString()).length;
                 const job = jobs.find((j) => j._id.toString() === jobId.toString());
@@ -915,7 +829,6 @@ class JobService {
                     applications: count,
                 };
             });
-            // Calculate rates
             const hired = statusCounts.hired || 0;
             const shortlisted = statusCounts.shortlisted || 0;
             const rejected = statusCounts.rejected || 0;
@@ -929,7 +842,6 @@ class JobService {
             const rejectionRate = totalApplications > 0
                 ? Number(((rejected / totalApplications) * 100).toFixed(1))
                 : 0;
-            // Monthly trends
             const monthlyTrends = jobs.reduce((acc, job) => {
                 const date = job.createdAt || job.createdAt;
                 const month = new Date(date).toISOString().slice(0, 7);
@@ -950,7 +862,6 @@ class JobService {
                 .map(([month, count]) => ({ month, count }))
                 .sort((a, b) => a.month.localeCompare(b.month))
                 .slice(-12);
-            // Return result
             return {
                 summary: {
                     totalJobs,
@@ -996,13 +907,9 @@ class JobService {
                 : "Failed to get global job statistics", 500);
         }
     }
-    /**
-     * Get job analytics for employer
-     */
     async getJobAnalytics(employerId, timeRange = "30d") {
         try {
             logger.info(`📊 Fetching job analytics for employer: ${employerId}`);
-            // Get all jobs for this employer
             const jobs = await Job.find({
                 postedBy: employerId,
                 isDeleted: { $ne: true },
@@ -1011,13 +918,10 @@ class JobService {
             if (jobIds.length === 0) {
                 return this.getEmptyAnalytics();
             }
-            // Get applications for these jobs
             const applications = await Application.find({
                 jobId: { $in: jobIds },
             });
-            // Calculate date range
             const dateRange = this.getDateRange(timeRange);
-            // Calculate statistics
             const stats = {
                 total: jobs.length,
                 activeJobs: jobs.filter((j) => j.isActive === true).length,
@@ -1147,9 +1051,6 @@ class JobService {
             return currentPeriod > 0 ? 100 : 0;
         return Number((((currentPeriod - previousPeriod) / previousPeriod) * 100).toFixed(1));
     }
-    /**
-     * Helper to get status counts
-     */
     getStatusCounts(applications) {
         const counts = {};
         applications.forEach((app) => {
@@ -1158,9 +1059,6 @@ class JobService {
         });
         return counts;
     }
-    /**
-     * Get empty global stats when no jobs exist
-     */
     getEmptyGlobalStats() {
         return {
             summary: {
@@ -1237,14 +1135,12 @@ class JobService {
             "Dec",
         ];
         const monthlyData = {};
-        // Initialize last 6 months
         for (let i = 5; i >= 0; i--) {
             const date = new Date();
             date.setMonth(date.getMonth() - i);
             const key = `${date.getFullYear()}-${date.getMonth()}`;
             monthlyData[key] = { jobs: 0, applications: 0, hires: 0 };
         }
-        // Count jobs
         jobs.forEach((job) => {
             const date = new Date(job.createdAt);
             const key = `${date.getFullYear()}-${date.getMonth()}`;
@@ -1252,7 +1148,6 @@ class JobService {
                 monthlyData[key].jobs++;
             }
         });
-        // Count applications and hires
         applications.forEach((app) => {
             const date = new Date(app.createdAt);
             const key = `${date.getFullYear()}-${date.getMonth()}`;

@@ -1,4 +1,3 @@
-// src/routes/users.routes.ts
 import express from "express";
 import userService from "../services/user.service";
 import { protect, authorize } from "../middleware/authMiddleware";
@@ -6,8 +5,6 @@ import { UserRole } from "../models/User.models";
 import { getNumberQueryParam, getStringParam, getUserId, } from "../utils/routeHelpers";
 import { getBooleanQueryParam, getStringQueryParam, } from "../utils/getQueryParam";
 const router = express.Router();
-// ============ Public Routes ============
-// Check if email is available
 router.get("/check-email", async (req, res) => {
     try {
         const email = getStringQueryParam(req.query.email);
@@ -29,7 +26,6 @@ router.get("/check-email", async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
-// Check if username is available
 router.get("/check-username", async (req, res) => {
     try {
         const username = getStringQueryParam(req.query.username);
@@ -51,8 +47,6 @@ router.get("/check-username", async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
-// ============ Protected Routes ============
-// Get current user profile
 router.get("/profile", protect, async (req, res) => {
     try {
         const userId = getUserId(req);
@@ -75,7 +69,6 @@ router.get("/profile", protect, async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
-// Update current user profile
 router.put("/profile", protect, async (req, res) => {
     try {
         const userId = getUserId(req);
@@ -100,7 +93,6 @@ router.put("/profile", protect, async (req, res) => {
         res.status(400).json({ error: errorMessage });
     }
 });
-// Change password
 router.put("/change-password", protect, async (req, res) => {
     try {
         const userId = getUserId(req);
@@ -135,7 +127,6 @@ router.put("/change-password", protect, async (req, res) => {
         res.status(400).json({ error: errorMessage });
     }
 });
-// Deactivate own account
 router.delete("/deactivate", protect, async (req, res) => {
     try {
         const userId = getUserId(req);
@@ -158,7 +149,6 @@ router.delete("/deactivate", protect, async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
-// Reactivate own account
 router.post("/reactivate", protect, async (req, res) => {
     try {
         const userId = getUserId(req);
@@ -182,8 +172,6 @@ router.post("/reactivate", protect, async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
-// ============ Admin Routes ============
-// Get all users (admin only)
 router.get("/", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const page = getNumberQueryParam(req.query.page, 1);
@@ -216,10 +204,8 @@ router.get("/", protect, authorize(UserRole.ADMIN), async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
-// Get user by ID (admin only)
 router.get("/:id", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
-        // getStringParam for params
         const id = getStringParam(req.params.id);
         if (!id) {
             res.status(400).json({ error: "Invalid user ID" });
@@ -240,7 +226,6 @@ router.get("/:id", protect, authorize(UserRole.ADMIN), async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
-// Update user (admin only)
 router.put("/:id", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const id = getStringParam(req.params.id);
@@ -265,7 +250,6 @@ router.put("/:id", protect, authorize(UserRole.ADMIN), async (req, res) => {
         res.status(400).json({ error: errorMessage });
     }
 });
-// Update user role (admin only)
 router.patch("/:id/role", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const id = getStringParam(req.params.id);
@@ -294,7 +278,6 @@ router.patch("/:id/role", protect, authorize(UserRole.ADMIN), async (req, res) =
         res.status(400).json({ error: errorMessage });
     }
 });
-// Activate user (admin only)
 router.patch("/:id/activate", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const id = getStringParam(req.params.id);
@@ -318,7 +301,6 @@ router.patch("/:id/activate", protect, authorize(UserRole.ADMIN), async (req, re
         res.status(500).json({ error: errorMessage });
     }
 });
-// Deactivate user (admin only)
 router.patch("/:id/deactivate", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const id = getStringParam(req.params.id);
@@ -342,7 +324,6 @@ router.patch("/:id/deactivate", protect, authorize(UserRole.ADMIN), async (req, 
         res.status(500).json({ error: errorMessage });
     }
 });
-// Delete user (admin only)
 router.delete("/:id", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const id = getStringParam(req.params.id);
@@ -365,7 +346,6 @@ router.delete("/:id", protect, authorize(UserRole.ADMIN), async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
-// Bulk update user roles (admin only)
 router.patch("/bulk/roles", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const { userIds, role } = req.body;
@@ -389,7 +369,6 @@ router.patch("/bulk/roles", protect, authorize(UserRole.ADMIN), async (req, res)
         res.status(500).json({ error: errorMessage });
     }
 });
-// Bulk deactivate users (admin only)
 router.patch("/bulk/deactivate", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const { userIds } = req.body;
@@ -411,7 +390,6 @@ router.patch("/bulk/deactivate", protect, authorize(UserRole.ADMIN), async (req,
         res.status(500).json({ error: errorMessage });
     }
 });
-// Get user statistics (admin only)
 router.get("/stats/overview", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const stats = await userService.getUserStats();
@@ -427,7 +405,6 @@ router.get("/stats/overview", protect, authorize(UserRole.ADMIN), async (req, re
         res.status(500).json({ error: errorMessage });
     }
 });
-// Search users by skills (admin only)
 router.get("/search/skills", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const skillsParam = getStringQueryParam(req.query.skills);
@@ -449,7 +426,6 @@ router.get("/search/skills", protect, authorize(UserRole.ADMIN), async (req, res
         res.status(500).json({ error: errorMessage });
     }
 });
-// Get users by role (admin only)
 router.get("/role/:role", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const role = getStringParam(req.params.role);
@@ -473,7 +449,6 @@ router.get("/role/:role", protect, authorize(UserRole.ADMIN), async (req, res) =
         res.status(500).json({ error: errorMessage });
     }
 });
-// Get active users (admin only)
 router.get("/active/all", protect, authorize(UserRole.ADMIN), async (req, res) => {
     try {
         const page = getNumberQueryParam(req.query.page, 1);

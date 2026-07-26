@@ -1,15 +1,9 @@
 import Application, { ApplicationStatus } from "../models/Application.model";
 import jobService from "./job.service";
 class ActivityService {
-    // services/activity.service.ts
-    /**
-     * Get activities for an employer with filters and pagination
-     * Merged version that handles both company-based and direct job-based queries
-     */
     async getActivities(employerId, filters = {}) {
         const { type, status, dateFrom, dateTo, limit = 20, page = 1 } = filters;
         const skip = (page - 1) * limit;
-        // ✅ Get jobs for this employer
         let jobs = [];
         jobs = await jobService.getJobsByEmployer(employerId);
         const jobIds = jobs.map((job) => job._id);
@@ -20,30 +14,21 @@ class ActivityService {
             };
         }
         const allActivities = [];
-        // 1. Get Application Activities
         const appActivities = await this.getApplicationActivities(jobIds, jobs, type, status, dateFrom, dateTo);
         allActivities.push(...appActivities);
-        // 2. Get Screening Activities (AI Screening)
         const screeningActivities = await this.getScreeningActivities(jobIds, jobs, type, status, dateFrom, dateTo);
         allActivities.push(...screeningActivities);
-        // 3. Get Generation Activities
         const generationActivities = await this.getGenerationActivities(jobIds, jobs, type, status, dateFrom, dateTo);
         allActivities.push(...generationActivities);
-        // 4. Get Analytics Activities
         const analyticsActivities = await this.getAnalyticsActivities(jobIds, jobs, type, status, dateFrom, dateTo);
         allActivities.push(...analyticsActivities);
-        // 5. Get Interview Activities
         const interviewActivities = await this.getInterviewActivities(jobIds, jobs, type, status, dateFrom, dateTo);
         allActivities.push(...interviewActivities);
-        // 6. Get Status Change Activities
         const statusActivities = await this.getStatusChangeActivities(jobIds, jobs, type, status, dateFrom, dateTo);
         allActivities.push(...statusActivities);
-        // 7. Get Job Creation Activities
         const jobActivities = await this.getJobCreationActivities(jobs, type, status, dateFrom, dateTo);
         allActivities.push(...jobActivities);
-        // Sort by timestamp descending
         allActivities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        // Apply pagination
         const total = allActivities.length;
         const paginatedActivities = allActivities.slice(skip, skip + limit);
         return {
@@ -56,9 +41,6 @@ class ActivityService {
             },
         };
     }
-    /**
-     * Get activity statistics
-     */
     async getActivityStats(employerId) {
         const result = await this.getActivities(employerId, {
             limit: 1000,
@@ -86,7 +68,6 @@ class ActivityService {
             pendingCount,
         };
     }
-    // ============ Private Helper Methods ============
     getTimeAgo(date) {
         const now = new Date();
         const diffMs = now.getTime() - new Date(date).getTime();
@@ -181,7 +162,6 @@ class ActivityService {
             .sort({ updatedAt: -1 })
             .limit(50);
         const activities = [];
-        // Single candidate screening
         applications.slice(0, 10).forEach((app) => {
             const job = jobs.find((j) => j._id.toString() === app.jobId.toString());
             const userName = app.userId
@@ -203,7 +183,6 @@ class ActivityService {
                 metadata: { applicationId: app._id, aiScore: app.aiScore },
             });
         });
-        // Bulk screening summary
         const screenedByJob = {};
         applications.forEach((app) => {
             const jobId = app.jobId.toString();
@@ -294,7 +273,6 @@ class ActivityService {
             status: ApplicationStatus.HIRED,
         });
         const now = new Date();
-        // Monthly analytics report
         const lastMonth = new Date(now);
         lastMonth.setMonth(lastMonth.getMonth() - 1);
         const monthlyApps = await Application.countDocuments({
@@ -319,7 +297,6 @@ class ActivityService {
                 },
             });
         }
-        // Quarterly analytics
         const quarterStart = new Date(now);
         quarterStart.setMonth(quarterStart.getMonth() - 3);
         const quarterlyApps = await Application.countDocuments({
