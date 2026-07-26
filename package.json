@@ -26,7 +26,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@types/gridfs-stream": "^0.5.39",
