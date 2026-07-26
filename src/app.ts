@@ -66,7 +66,7 @@ app.use(
 );
 
 // ============ Database Connection ============
-const MONGODB_URI = `mongodb://${config.DB_HOST || "mongodb"}:${config.DB_PORT || "27017"}/${config.DB_NAME || "jobportal"}`;
+const MONGODB_URI = config.MONGODB_URI;
 
 mongoose
   .connect(MONGODB_URI)

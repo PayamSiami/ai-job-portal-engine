@@ -17,6 +17,7 @@ class Config {
   public GEMINI_TOP_P: number;
   public GROQ_MODEL: string;
   public GROQ_API_KEY: string;
+  public MONGODB_URI: string;
 
   constructor() {
     this.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
@@ -35,6 +36,7 @@ class Config {
     this.GEMINI_TOP_P = parseFloat(process.env.GEMINI_TOP_P || "0.8");
     this.GROQ_API_KEY = process.env.GROQ_API_KEY || "";
     this.GROQ_MODEL = process.env.GROQ_MODEL || "";
+    this.MONGODB_URI = process.env.MONGODB_URI || "";
   }
 }
 
