@@ -4,20 +4,21 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
-import authRoutes from "./routes/auth.routes";
-import jobRoutes from "./routes/job.routes";
-import applicationRoutes from "./routes/application.routes";
-import resumeRoutes from "./routes/resume.routes";
-import userRoutes from "./routes/user.routes";
-import { config } from "./config";
-import { swaggerSpec, swaggerUi } from "./config/swagger";
-import healthService from "./services/health.service";
-import logger from "./utils/logger";
-import dashboardRoutes from "./routes/dashboard.routes";
-import candidateRoutes from "./routes/candidates.routes";
-import activityRoutes from "./routes/activity.routes";
-import companyRoutes from "./routes/company.routes";
+import authRoutes from "./routes/auth.routes.js";
+import jobRoutes from "./routes/job.routes.js";
+import applicationRoutes from "./routes/application.routes.js";
+import resumeRoutes from "./routes/resume.routes.js";
+import userRoutes from "./routes/user.routes.js";
+import { config } from "./config/index.js";
+import { swaggerSpec, swaggerUi } from "./config/swagger.js";
+import healthService from "./services/health.service.js";
+import logger from "./utils/logger.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
+import candidateRoutes from "./routes/candidates.routes.js";
+import activityRoutes from "./routes/activity.routes.js";
+import companyRoutes from "./routes/company.routes.js";
 const app = express();
+// ============ Middleware ============
 app.use(cors({
     origin: ["http://localhost:3000", "http://localhost:5173"],
     credentials: true,
@@ -30,12 +31,14 @@ app.use(helmet({
 app.use(morgan("dev"));
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
+// Rate limiting
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
     message: { error: "Too many requests from this IP, please try again later." },
 });
 app.use("/api/", apiLimiter);
+// ============ Swagger Documentation ============
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     explorer: true,
     customCss: ".swagger-ui .topbar { display: none }",
@@ -48,11 +51,13 @@ app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
         showCommonExtensions: true,
     },
 }));
+// ============ Database Connection ============
 const MONGODB_URI = `mongodb://${config.DB_HOST || "mongodb"}:${config.DB_PORT || "27017"}/${config.DB_NAME || "jobportal"}`;
 mongoose
     .connect(MONGODB_URI)
     .then(() => logger.info("✅ MongoDB connected"))
     .catch((err) => logger.error("⚠️ MongoDB not connected:", err.message));
+// ============ Routes ============
 app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes);
@@ -62,6 +67,7 @@ app.use("/api/candidates", candidateRoutes);
 app.use("/api/activities", activityRoutes);
 app.use("/api/company", companyRoutes);
 app.use("/api", dashboardRoutes);
+// Health check endpoints
 app.get("/health", async (req, res) => {
     try {
         const health = await healthService.checkLiveness();
@@ -74,6 +80,7 @@ app.get("/health", async (req, res) => {
         });
     }
 });
+// Detailed health check
 app.get("/health/detailed", async (req, res) => {
     try {
         const health = await healthService.checkHealth();
@@ -92,6 +99,7 @@ app.get("/health/detailed", async (req, res) => {
         });
     }
 });
+// Readiness probe
 app.get("/health/ready", async (req, res) => {
     try {
         const readiness = await healthService.checkReadiness();
@@ -106,9 +114,11 @@ app.get("/health/ready", async (req, res) => {
         });
     }
 });
+// 404 handler
 app.use((req, res) => {
     res.status(404).json({ error: "Route not found" });
 });
+// ============ Global Error Handler ============
 app.use((err, req, res, next) => {
     console.error("❌ Error:", {
         message: err.message,

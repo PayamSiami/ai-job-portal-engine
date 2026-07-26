@@ -1,5 +1,6 @@
 import { body, validationResult } from "express-validator";
-import { AppError } from "../utils/errorHandler";
+import { AppError } from "../utils/errorHandler.js";
+// Validation for registration
 export const validateRegistration = [
     body("username")
         .trim()
@@ -21,6 +22,7 @@ export const validateRegistration = [
         next();
     },
 ];
+// Validation for login
 export const validateLogin = [
     body("email").isEmail().withMessage("Please include a valid email"),
     body("password").exists().withMessage("Password is required"),
@@ -33,8 +35,12 @@ export const validateLogin = [
         next();
     },
 ];
+/**
+ * Validate request with express-validator
+ */
 export const validate = (validations) => {
     return async (req, res, next) => {
+        // Run all validations
         await Promise.all(validations.map((validation) => validation.run(req)));
         const errors = validationResult(req);
         if (errors.isEmpty()) {
@@ -44,6 +50,9 @@ export const validate = (validations) => {
         throw new AppError(errorMessages.join(", "), 400);
     };
 };
+/**
+ * Validate required fields in request body
+ */
 export const validateRequired = (fields) => {
     return (req, res, next) => {
         const missingFields = fields.filter((field) => !req.body[field]);

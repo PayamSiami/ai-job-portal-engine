@@ -1,10 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { config } from "../../config/index";
+import { config } from "../../config/index.js";
 class JobService {
     genAI = null;
     model = null;
     constructor() {
         const apiKey = process.env.GEMINI_API_KEY;
+        // ✅ Don't throw error - just warn and continue
         if (apiKey) {
             try {
                 this.genAI = new GoogleGenerativeAI(apiKey);
@@ -34,6 +35,10 @@ class JobService {
             .replace(/[^}]*$/, "")
             .trim();
     }
+    /**
+     * Search jobs using parsed filters
+     */
+    // In jobSearchService.ts
     async searchJobs(filters) {
         const whereClause = {};
         if (filters.title) {
@@ -65,10 +70,14 @@ class JobService {
             rawQuery: filters.rawQuery || "",
         };
     }
+    /**
+     * Convert natural language query to structured job search filters
+     */
     async parseNaturalLanguageQuery(query) {
         if (!query || query.trim().length === 0) {
             throw new Error("Search query is required");
         }
+        // Check if AI is available
         if (!this.model) {
             console.warn("⚠️ AI not available. Using fallback parsing.");
             return this.parseFallback(query);
@@ -129,6 +138,7 @@ class JobService {
             const result = await this.model.generateContent(prompt);
             const cleanedText = this.cleanAIResponse(result.response.text());
             const parsed = JSON.parse(cleanedText);
+            // Log what was parsed for debugging
             console.log("AI Parsed Filters:", parsed);
             return {
                 rawQuery: query,
@@ -181,19 +191,23 @@ class JobService {
             jobType: null,
             skills: null,
         };
+        // Extract job title
         const titleMatch = query.match(/(?:senior|junior|lead|mid)\s+(\w+)\s+(developer|engineer|designer|manager)/i) || query.match(/(\w+)\s+(developer|engineer|designer|manager)/i);
         if (titleMatch) {
             filters.title = titleMatch[1] + " " + titleMatch[2];
         }
+        // Extract location (look for capitalized words after 'in', 'at', 'near')
         const locationMatch = query.match(/(?:in|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
         if (locationMatch) {
             filters.location = locationMatch[1];
         }
+        // Extract salary - simpler approach
         const salaryRegex = /(\d+(?:,\d+)?)(?:\s*[kK])?/g;
         let salaryMatch;
         const salaries = [];
         while ((salaryMatch = salaryRegex.exec(query)) !== null) {
             let num = parseInt(salaryMatch[1].replace(/,/g, ""));
+            // Check if it has 'k' after it
             const fullMatch = salaryMatch[0];
             if (fullMatch.toLowerCase().includes("k") ||
                 query
@@ -202,6 +216,7 @@ class JobService {
                 num = num * 1000;
             }
             if (num > 1000) {
+                // Only consider numbers > 1000 as salary
                 salaries.push(num);
             }
         }
@@ -223,6 +238,7 @@ class JobService {
                 }
             }
         }
+        // Extract experience level
         if (/(senior|lead|5\+|5 years)/i.test(lowerQuery)) {
             filters.experienceLevel = "senior";
         }
@@ -232,6 +248,7 @@ class JobService {
         else if (/(mid|3-5|3 years)/i.test(lowerQuery)) {
             filters.experienceLevel = "mid";
         }
+        // Extract work mode
         if (/(remote|work from home|wfh)/i.test(lowerQuery)) {
             filters.workMode = "remote";
         }

@@ -1,10 +1,12 @@
+// backend/src/scripts/diagnose-gemini.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { config } from "../config/index";
+import { config } from "../config/index.js";
 async function diagnose() {
     console.log("🔍 Starting Gemini API Diagnosis...");
     console.log("📡 IP Address:", await getIP());
     console.log("🔑 API Key:", config.GEMINI_API_KEY ? "✅ Set" : "❌ Missing");
     console.log("🤖 Model:", config.GEMINI_MODEL);
+    // Test 1: Basic API Call
     try {
         const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY || "");
         const model = genAI.getGenerativeModel({ model: config.GEMINI_MODEL });
@@ -22,6 +24,7 @@ async function diagnose() {
             console.log("   → Try: gemini-1.0-pro or gemini-pro");
         }
     }
+    // Test 2: Check Internet Connection
     try {
         const response = await fetch("https://www.google.com");
         console.log("✅ Test 2 Passed: Internet connection is working");
@@ -29,6 +32,7 @@ async function diagnose() {
     catch {
         console.log("❌ Test 2 Failed: No internet connection");
     }
+    // Test 3: Check if Google is reachable
     try {
         const response = await fetch("https://generativelanguage.googleapis.com");
         console.log("✅ Test 3 Passed: Google API endpoint is reachable");

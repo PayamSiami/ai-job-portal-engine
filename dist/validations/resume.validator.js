@@ -1,4 +1,7 @@
 import { body, param, query } from "express-validator";
+/**
+ * Validation for creating a resume
+ */
 export const createResumeValidation = [
     body("title")
         .notEmpty()
@@ -46,6 +49,9 @@ export const createResumeValidation = [
         .isArray()
         .withMessage("Projects must be an array"),
 ];
+/**
+ * Validation for updating a resume
+ */
 export const updateResumeValidation = [
     param("id")
         .notEmpty()
@@ -73,6 +79,9 @@ export const updateResumeValidation = [
         .isBoolean()
         .withMessage("isDefault must be a boolean"),
 ];
+/**
+ * Validation for getting a single resume
+ */
 export const getResumeValidation = [
     param("id")
         .notEmpty()
@@ -80,6 +89,9 @@ export const getResumeValidation = [
         .isMongoId()
         .withMessage("Invalid resume ID format"),
 ];
+/**
+ * Validation for duplicating a resume
+ */
 export const duplicateResumeValidation = [
     param("id")
         .notEmpty()
@@ -87,6 +99,9 @@ export const duplicateResumeValidation = [
         .isMongoId()
         .withMessage("Invalid resume ID format"),
 ];
+/**
+ * Validation for deleting a resume
+ */
 export const deleteResumeValidation = [
     param("id")
         .notEmpty()
@@ -94,6 +109,9 @@ export const deleteResumeValidation = [
         .isMongoId()
         .withMessage("Invalid resume ID format"),
 ];
+/**
+ * Validation for setting default resume
+ */
 export const setDefaultResumeValidation = [
     param("id")
         .notEmpty()
@@ -101,6 +119,9 @@ export const setDefaultResumeValidation = [
         .isMongoId()
         .withMessage("Invalid resume ID format"),
 ];
+/**
+ * Validation for downloading PDF
+ */
 export const downloadPDFValidation = [
     param("id")
         .notEmpty()
@@ -108,6 +129,9 @@ export const downloadPDFValidation = [
         .isMongoId()
         .withMessage("Invalid resume ID format"),
 ];
+/**
+ * Validation for exporting resume
+ */
 export const exportResumeValidation = [
     param("id")
         .notEmpty()
@@ -119,6 +143,12 @@ export const exportResumeValidation = [
         .isIn(["json", "pdf"])
         .withMessage("Invalid export format. Must be one of: json, pdf"),
 ];
+// ============================================
+// AI Feature Validations
+// ============================================
+/**
+ * Validation for analyzing a resume
+ */
 export const analyzeResumeValidation = [
     param("id")
         .notEmpty()
@@ -134,6 +164,9 @@ export const analyzeResumeValidation = [
         .isMongoId()
         .withMessage("Invalid job ID format"),
 ];
+/**
+ * Validation for generating a cover letter
+ */
 export const generateCoverLetterValidation = [
     param("id")
         .notEmpty()
@@ -162,6 +195,9 @@ export const generateCoverLetterValidation = [
         .isBoolean()
         .withMessage("highlightSkills must be a boolean"),
 ];
+/**
+ * Validation for getting career feedback
+ */
 export const careerFeedbackValidation = [
     param("id")
         .notEmpty()
@@ -173,6 +209,9 @@ export const careerFeedbackValidation = [
         .isString()
         .withMessage("Focus must be a string"),
 ];
+/**
+ * Validation for getting job matches
+ */
 export const jobMatchesValidation = [
     param("id")
         .notEmpty()
@@ -188,6 +227,9 @@ export const jobMatchesValidation = [
         .isInt({ min: 0, max: 100 })
         .withMessage("Minimum match score must be between 0 and 100"),
 ];
+/**
+ * Validation for getting improvement suggestions
+ */
 export const improvementSuggestionsValidation = [
     param("id")
         .notEmpty()
@@ -195,6 +237,9 @@ export const improvementSuggestionsValidation = [
         .isMongoId()
         .withMessage("Invalid resume ID format"),
 ];
+/**
+ * Validation for bulk delete
+ */
 export const bulkDeleteValidation = [
     body("resumeIds")
         .isArray({ min: 1, max: 50 })
@@ -203,6 +248,9 @@ export const bulkDeleteValidation = [
         .isMongoId()
         .withMessage("Each resume ID must be a valid MongoDB ID"),
 ];
+// ============================================
+// Combined Exports for Convenience
+// ============================================
 export const resumeValidations = {
     create: createResumeValidation,
     update: updateResumeValidation,

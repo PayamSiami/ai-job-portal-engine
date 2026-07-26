@@ -1,8 +1,10 @@
+// src/services/ai/careerFeedback.ts
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
-import { config } from "../../config/index";
-import hashString from "../../utils/hashString";
-import { generateWithGroq, testGroqConnection } from "./groq.service";
+import { config } from "../../config/index.js";
+import hashString from "../../utils/hashString.js";
+import { generateWithGroq, testGroqConnection } from "./groq.service.js";
+// ============ Service Class ============
 class CareerFeedbackService {
     genAI;
     model;
@@ -24,19 +26,27 @@ class CareerFeedbackService {
             model: config.GEMINI_MODEL,
             generationConfig,
         });
+        // Initialize cache with 10 minute TTL
         this.cache = new NodeCache({
             stdTTL: 600,
             checkperiod: 120,
         });
     }
+    /**
+     * Generate comprehensive career feedback from a resume
+     */
     async generateCareerFeedback(resumeText, options = {}) {
         const startTime = Date.now();
         const { retryCount = 2, useCache = true, includeDetailed = true, industry, targetRole, } = options;
+        // Validate input
         if (!resumeText || resumeText.trim().length < 50) {
             throw new Error("Resume text must be at least 50 characters");
         }
+        // Truncate if too long
         const truncatedResume = this.truncateText(resumeText, this.MAX_RESUME_LENGTH);
+        // Generate cache key
         const cacheKey = this.generateCacheKey(truncatedResume, industry, targetRole);
+        // Check cache
         if (useCache) {
             const cachedResult = this.cache.get(cacheKey);
             if (cachedResult) {
@@ -47,11 +57,13 @@ class CareerFeedbackService {
             }
         }
         let lastError = null;
+        // ✅ Test Groq connection first
         const isConnected = await testGroqConnection();
         if (!isConnected) {
             console.warn("⚠️ Groq connection failed, using fallback");
             return this.getFallbackResult("Groq connection failed");
         }
+        // ✅ Try Groq with retries
         for (let attempt = 0; attempt <= retryCount; attempt++) {
             try {
                 console.log(`🤖 Attempt ${attempt + 1}: Generating feedback with Groq...`);
@@ -69,6 +81,7 @@ class CareerFeedbackService {
                             fromCache: false,
                         },
                     };
+                    // Store in cache
                     if (useCache) {
                         this.cache.set(cacheKey, finalResult);
                     }
@@ -89,9 +102,11 @@ class CareerFeedbackService {
                 }
             }
         }
+        // ✅ If all attempts fail, use fallback
         console.error("All Groq attempts failed, using fallback:", lastError);
         return this.getFallbackResult(lastError?.message);
     }
+    // ============ Private Helper Methods ============
     buildFeedbackPrompt(resumeText, industry, targetRole, includeDetailed = true) {
         let prompt = `
       Analyze this resume and provide comprehensive career feedback:
@@ -208,19 +223,29 @@ class CareerFeedbackService {
     `;
         return prompt;
     }
+    // backend/src/services/ai/careerFeedback.ts
+    /**
+     * Parse and validate feedback result with better error handling
+     */
     parseFeedbackResult(text, includeDetailed) {
         try {
+            // ✅ Try to extract JSON from the response
             let jsonStr = text.trim();
+            // Remove markdown code blocks
             jsonStr = jsonStr.replace(/```json\s*/g, "");
             jsonStr = jsonStr.replace(/```\s*/g, "");
+            // Find JSON object in the text (in case there's extra text)
             const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
             if (!jsonMatch) {
                 throw new Error("No JSON object found in response");
             }
+            // Parse the JSON
             let parsed = JSON.parse(jsonMatch[0]);
+            // If it's nested, dig deeper
             if (parsed.feedback) {
                 parsed = parsed.feedback;
             }
+            // ✅ Ensure all required fields exist with defaults
             const result = {
                 issues: Array.isArray(parsed.issues) ? parsed.issues : [],
                 improvements: Array.isArray(parsed.improvements)
@@ -235,11 +260,13 @@ class CareerFeedbackService {
                 overallScore: typeof parsed.overallScore === "number"
                     ? Math.min(100, Math.max(0, parsed.overallScore))
                     : 0,
+                // ✅ Always include strengths and recommendations with defaults
                 strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
                 recommendations: Array.isArray(parsed.recommendations)
                     ? parsed.recommendations
                     : [],
             };
+            // ✅ Include detailed analysis if available and requested
             if (includeDetailed && parsed.detailedAnalysis) {
                 result.detailedAnalysis = parsed.detailedAnalysis;
             }
@@ -248,9 +275,13 @@ class CareerFeedbackService {
         catch (error) {
             console.error("Failed to parse feedback result:", error);
             console.error("Raw text:", text.substring(0, 500) + "...");
+            // ✅ Try to extract data using regex as fallback
             return this.extractFeedbackFromText(text);
         }
     }
+    /**
+     * Fallback: Extract feedback from unstructured text
+     */
     extractFeedbackFromText(text) {
         const result = {
             issues: [],
@@ -258,6 +289,7 @@ class CareerFeedbackService {
             missingSkills: [],
             targetRoles: [],
             overallScore: 50,
+            // ✅ Add these required fields
             strengths: [],
             recommendations: {
                 immediate: [],
@@ -265,10 +297,12 @@ class CareerFeedbackService {
                 longTerm: [],
             },
         };
+        // Try to find score
         const scoreMatch = text.match(/(?:score|overallScore|rating)[:\s]*(\d+)/i);
         if (scoreMatch) {
             result.overallScore = Math.min(100, Math.max(0, parseInt(scoreMatch[1])));
         }
+        // Try to extract issues
         const issueMatches = text.match(/(?:issue|problem|concern)[:\s]*([^.\n]+)/gi);
         if (issueMatches) {
             result.issues = issueMatches.slice(0, 5).map((item, index) => ({
@@ -281,6 +315,7 @@ class CareerFeedbackService {
                 suggestion: "Review and improve this area",
             }));
         }
+        // Try to extract improvements
         const improvementMatches = text.match(/(?:improvement|suggestion|recommend)[:\s]*([^.\n]+)/gi);
         if (improvementMatches) {
             result.improvements = improvementMatches
@@ -289,6 +324,7 @@ class CareerFeedbackService {
                 .replace(/^(?:improvement|suggestion|recommend)[:\s]*/i, "")
                 .trim());
         }
+        // ✅ Try to extract strengths
         const strengthMatches = text.match(/(?:strength|strong point|good)[:\s]*([^.\n]+)/gi);
         if (strengthMatches) {
             result.strengths = strengthMatches.slice(0, 5).map((item) => ({
@@ -299,6 +335,7 @@ class CareerFeedbackService {
                 impact: "medium",
             }));
         }
+        // ✅ Try to extract missing skills
         const skillMatches = text.match(/(?:missing skill|skill gap|need.*skill)[:\s]*([^.\n]+)/gi);
         if (skillMatches) {
             result.missingSkills = skillMatches
@@ -307,6 +344,7 @@ class CareerFeedbackService {
                 .replace(/^(?:missing skill|skill gap|need.*skill)[:\s]*/i, "")
                 .trim());
         }
+        // ✅ Build recommendations if not found
         if (result.improvements.length > 0) {
             result.recommendations = {
                 immediate: result.improvements.slice(0, 3),
@@ -317,11 +355,15 @@ class CareerFeedbackService {
                 ],
             };
         }
+        // If no data extracted, create default feedback
         if (result.issues.length === 0 && result.improvements.length === 0) {
             return this.getDefaultFeedbackResult();
         }
         return result;
     }
+    /**
+     * Get default feedback result when all parsing fails
+     */
     getDefaultFeedbackResult() {
         return {
             issues: [
@@ -444,10 +486,17 @@ class CareerFeedbackService {
     delay(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
+    // ============ Public Utility Methods ============
+    /**
+     * Clear cache
+     */
     clearCache() {
         this.cache.flushAll();
         console.log("Career feedback cache cleared");
     }
+    /**
+     * Get cache statistics
+     */
     getCacheStats() {
         const keys = this.cache.keys();
         return {
@@ -457,4 +506,5 @@ class CareerFeedbackService {
         };
     }
 }
+// Export singleton instance
 export default new CareerFeedbackService();

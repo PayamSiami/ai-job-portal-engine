@@ -1,23 +1,31 @@
-import User, { UserRole } from "../models/User.models";
+// src/services/userService.ts
+import User, { UserRole } from "../models/User.models.js";
 import mongoose from "mongoose";
-import logger from "../utils/logger";
+import logger from "../utils/logger.js";
+// ============ Service Class ============
 class UserService {
+    /**
+     * Create a new user
+     */
     async createUser(data) {
         try {
             logger.info("Creating new user", {
                 username: data.username,
                 email: data.email,
             });
+            // Check if email already exists
             const existingEmail = await User.findOne({
                 email: data.email.toLowerCase(),
             });
             if (existingEmail) {
                 throw new Error("Email already registered");
             }
+            // Check if username already exists
             const existingUsername = await User.findOne({ username: data.username });
             if (existingUsername) {
                 throw new Error("Username already taken");
             }
+            // Create user
             const user = new User({
                 username: data.username,
                 email: data.email.toLowerCase(),
@@ -47,6 +55,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Get user by ID
+     */
     async getUserById(userId) {
         try {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -62,6 +73,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Get user by email
+     */
     async getUserByEmail(email) {
         try {
             return User.findOne({ email: email.toLowerCase() })
@@ -76,6 +90,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Get user by username
+     */
     async getUserByUsername(username) {
         try {
             return User.findOne({ username }).select("-password -__v").exec();
@@ -88,10 +105,14 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Get users with filters and pagination
+     */
     async getUsers(filters = {}, options = {}) {
         try {
             const { page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc", } = options;
             const skip = (page - 1) * limit;
+            // Build query
             const query = {};
             if (filters.role) {
                 query.role = filters.role;
@@ -140,15 +161,20 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Update user
+     */
     async updateUser(userId, data) {
         try {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
                 throw new Error("Invalid user ID");
             }
+            // Check if user exists
             const user = await User.findById(userId);
             if (!user) {
                 throw new Error("User not found");
             }
+            // Check if email is being updated and is not taken
             if (data.email && data.email !== user.email) {
                 const existing = await User.findOne({
                     email: data.email.toLowerCase(),
@@ -158,12 +184,14 @@ class UserService {
                 }
                 data.email = data.email.toLowerCase();
             }
+            // Check if username is being updated and is not taken
             if (data.username && data.username !== user.username) {
                 const existing = await User.findOne({ username: data.username });
                 if (existing) {
                     throw new Error("Username already taken");
                 }
             }
+            // Update user
             const updated = await User.findByIdAndUpdate(userId, { ...data, updatedAt: new Date() }, { new: true, runValidators: true }).select("-password -__v");
             logger.info("User updated", { userId });
             return updated;
@@ -177,6 +205,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Update user profile
+     */
     async updateProfile(userId, profileData) {
         try {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -186,6 +217,7 @@ class UserService {
             if (!user) {
                 throw new Error("User not found");
             }
+            // Update profile fields
             if (profileData.firstName !== undefined)
                 user.profile.firstName = profileData.firstName;
             if (profileData.lastName !== undefined)
@@ -215,6 +247,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Change user password
+     */
     async changePassword(userId, data) {
         try {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -224,10 +259,12 @@ class UserService {
             if (!user) {
                 throw new Error("User not found");
             }
+            // Verify current password
             const isMatch = await user.comparePassword(data.currentPassword);
             if (!isMatch) {
                 throw new Error("Current password is incorrect");
             }
+            // Update password
             user.password = data.newPassword;
             await user.save();
             logger.info("Password changed", { userId });
@@ -244,6 +281,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Deactivate user (soft delete)
+     */
     async deactivateUser(userId) {
         try {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -263,6 +303,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Activate user
+     */
     async activateUser(userId) {
         try {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -282,6 +325,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Delete user (permanent)
+     */
     async deleteUser(userId) {
         try {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -302,6 +348,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Get user statistics
+     */
     async getUserStats() {
         try {
             const [total, active, inactive, byRoleAgg, recentRegistrations, withResume,] = await Promise.all([
@@ -345,6 +394,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Search users by skills
+     */
     async searchBySkills(skills) {
         try {
             if (!skills || skills.length === 0) {
@@ -366,12 +418,21 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Get users by role
+     */
     async getUsersByRole(role, options = {}) {
         return this.getUsers({ role }, options);
     }
+    /**
+     * Get active users
+     */
     async getActiveUsers(options = {}) {
         return this.getUsers({ isActive: true }, options);
     }
+    /**
+     * Check if email is available
+     */
     async isEmailAvailable(email) {
         try {
             const user = await User.findOne({ email: email.toLowerCase() });
@@ -385,6 +446,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Check if username is available
+     */
     async isUsernameAvailable(username) {
         try {
             const user = await User.findOne({ username });
@@ -398,6 +462,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Bulk update user roles
+     */
     async bulkUpdateRoles(userIds, role) {
         try {
             const failed = [];
@@ -432,6 +499,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Bulk deactivate users
+     */
     async bulkDeactivateUsers(userIds) {
         try {
             const failed = [];
@@ -464,6 +534,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Validate user credentials
+     */
     async validateCredentials(email, password) {
         try {
             const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
@@ -487,6 +560,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Update user resume association
+     */
     async updateUserResume(userId, resumeId) {
         try {
             if (!mongoose.Types.ObjectId.isValid(userId) ||
@@ -508,6 +584,9 @@ class UserService {
             throw error;
         }
     }
+    /**
+     * Get user by resume ID
+     */
     async getUserByResumeId(resumeId) {
         try {
             if (!mongoose.Types.ObjectId.isValid(resumeId)) {

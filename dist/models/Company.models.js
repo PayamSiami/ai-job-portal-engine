@@ -1,5 +1,7 @@
+// backend/src/models/Company.model.ts
 import mongoose, { Schema } from "mongoose";
 import slugify from "slugify";
+// ==================== Enums with Lowercase Values ====================
 export var CompanySize;
 (function (CompanySize) {
     CompanySize["MICRO"] = "micro";
@@ -59,6 +61,7 @@ export var SocialPlatform;
     SocialPlatform["GITHUB"] = "github";
     SocialPlatform["WEBSITE"] = "website";
 })(SocialPlatform || (SocialPlatform = {}));
+// ==================== Schema ====================
 const SocialLinkSchema = new Schema({
     platform: {
         type: String,
@@ -192,6 +195,7 @@ const CompanySchema = new Schema({
     toJSON: { virtuals: true, versionKey: false },
     toObject: { virtuals: true, versionKey: false },
 });
+// ==================== Pre-save Middleware ====================
 CompanySchema.pre("save", async function () {
     if (this.isModified("name") || !this.slug) {
         this.slug = slugify(this.name, {
@@ -200,6 +204,7 @@ CompanySchema.pre("save", async function () {
             remove: /[*+~.()'"!:@]/g,
         });
     }
+    // Ensure enum values are lowercase
     if (this.companySize) {
         this.companySize = this.companySize.toLowerCase();
     }
@@ -213,6 +218,7 @@ CompanySchema.pre("save", async function () {
         this.status = this.status.toLowerCase();
     }
 });
+// ==================== Static Methods ====================
 CompanySchema.statics.generateUniqueSlug = async function (baseSlug) {
     let slug = baseSlug;
     let counter = 1;
@@ -222,11 +228,13 @@ CompanySchema.statics.generateUniqueSlug = async function (baseSlug) {
     }
     return slug;
 };
+// ==================== Indexes ====================
 CompanySchema.index({ name: "text", description: "text", tagline: "text" });
 CompanySchema.index({ ownerId: 1, status: 1 });
 CompanySchema.index({ isActive: 1, isVerified: 1 });
 CompanySchema.index({ companyType: 1, industryType: 1 });
 CompanySchema.index({ "location.city": 1, "location.country": 1 });
+// ==================== Virtuals ====================
 CompanySchema.virtual("totalJobs", {
     ref: "Job",
     localField: "_id",
@@ -240,5 +248,6 @@ CompanySchema.virtual("activeJobs", {
     count: true,
     match: { isActive: true },
 });
+// ==================== Model ====================
 export const Company = mongoose.model("Company", CompanySchema);
 export default Company;

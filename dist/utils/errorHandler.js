@@ -11,8 +11,10 @@ export class AppError extends Error {
     }
 }
 export const errorHandler = (err, req, res, next) => {
+    // ✅ Ensure statusCode is a number - THIS IS THE KEY FIX
     const statusCode = typeof err.statusCode === "number" ? err.statusCode : 500;
     const message = err.message || "Something went wrong";
+    // ✅ Use statusCode, NOT err.status
     const status = statusCode >= 400 && statusCode < 500 ? "fail" : "error";
     console.error("❌ Error:", {
         statusCode,
@@ -22,6 +24,7 @@ export const errorHandler = (err, req, res, next) => {
         path: req.path,
         method: req.method,
     });
+    // Development error response
     if (process.env.NODE_ENV === "development") {
         res.status(statusCode).json({
             success: false,
@@ -33,6 +36,7 @@ export const errorHandler = (err, req, res, next) => {
         });
     }
     else {
+        // Production error response
         if (err.isOperational) {
             res.status(statusCode).json({
                 success: false,
@@ -40,6 +44,7 @@ export const errorHandler = (err, req, res, next) => {
             });
         }
         else {
+            // Programming or other unknown error: don't leak error details
             console.error("💥 Unhandled error:", err);
             res.status(500).json({
                 success: false,

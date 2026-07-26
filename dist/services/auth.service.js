@@ -1,9 +1,14 @@
-import { config } from "../config/index";
-import User, { UserRole } from "../models/User.models";
+// src/services/authService.ts
+import { config } from "../config/index.js";
+import User, { UserRole } from "../models/User.models.js";
 import jwt from "jsonwebtoken";
 class AuthService {
+    /**
+     * Register a new user
+     */
     async register(registerData) {
         const { username, email, password, role, profile } = registerData;
+        // Check if user already exists
         const existingUser = await User.findOne({
             $or: [{ email: email.toLowerCase() }, { username }],
         });
@@ -15,6 +20,7 @@ class AuthService {
                 throw new Error("Username already taken");
             }
         }
+        // Create new user
         const user = new User({
             username,
             email: email.toLowerCase(),
@@ -24,7 +30,9 @@ class AuthService {
             isActive: true,
         });
         await user.save();
+        // Generate JWT token
         const token = this.generateToken(user._id);
+        // Return user data (excluding password)
         return {
             user: {
                 _id: user._id,
@@ -35,22 +43,31 @@ class AuthService {
             token,
         };
     }
+    /**
+     * Login user
+     */
     async login(loginData) {
         const { email, password } = loginData;
+        // Find user by email
         const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
         if (!user) {
             throw new Error("Invalid email or password");
         }
+        // Check if user is active
         if (!user.isActive) {
             throw new Error("Account has been deactivated");
         }
+        // Compare passwords
         const isPasswordValid = await user.comparePassword(password);
         if (!isPasswordValid) {
             throw new Error("Invalid email or password");
         }
+        // Update last login
         user.lastLogin = new Date();
         await user.save();
+        // Generate JWT token
         const token = this.generateToken(user._id);
+        // Return user data (excluding password)
         return {
             user: {
                 _id: user._id,
@@ -61,9 +78,15 @@ class AuthService {
             token,
         };
     }
+    /**
+     * Get user by ID
+     */
     async getUserById(userId) {
         return User.findById(userId).select("-password -__v").exec();
     }
+    /**
+     * Verify JWT token
+     */
     async verifyToken(token) {
         try {
             const jwtSecret = config.JWT_SECRET;
@@ -77,25 +100,34 @@ class AuthService {
             throw new Error("Invalid or expired token");
         }
     }
+    /**
+     * Generate JWT token
+     */
     generateToken(userId) {
         const jwtSecret = config.JWT_SECRET;
         if (!jwtSecret) {
             throw new Error("JWT_SECRET is not defined");
         }
         const jwtExpire = config.JWT_EXPIRE || "30d";
+        // ✅ FIX: Use type assertion
         return jwt.sign({ id: userId.toString() }, jwtSecret, {
             expiresIn: jwtExpire,
         });
     }
+    /**
+     * Change user password
+     */
     async changePassword(userId, oldPassword, newPassword) {
         const user = await User.findById(userId).select("+password");
         if (!user) {
             throw new Error("User not found");
         }
+        // Verify old password
         const isPasswordValid = await user.comparePassword(oldPassword);
         if (!isPasswordValid) {
             throw new Error("Current password is incorrect");
         }
+        // Update password
         user.password = newPassword;
         await user.save();
         return {
@@ -103,11 +135,15 @@ class AuthService {
             message: "Password updated successfully",
         };
     }
+    /**
+     * Reset password (forgot password flow)
+     */
     async resetPassword(email, newPassword) {
         const user = await User.findOne({ email: email.toLowerCase() });
         if (!user) {
             throw new Error("User not found");
         }
+        // Update password
         user.password = newPassword;
         await user.save();
         return {
@@ -115,12 +151,18 @@ class AuthService {
             message: "Password reset successfully",
         };
     }
+    /**
+     * Logout (invalidate token)
+     */
     async logout(userId) {
         return {
             success: true,
             message: "Logged out successfully",
         };
     }
+    /**
+     * Refresh token
+     */
     async refreshToken(refreshToken) {
         try {
             const decoded = await this.verifyToken(refreshToken);

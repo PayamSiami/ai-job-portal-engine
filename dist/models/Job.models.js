@@ -1,4 +1,6 @@
+// backend/src/models/Job.models.ts
 import mongoose, { Schema } from "mongoose";
+// ✅ Define enums as constants
 export const JOB_TYPES = [
     "full-time",
     "part-time",
@@ -109,6 +111,7 @@ const jobSchema = new Schema({
     toJSON: { versionKey: false },
     toObject: { versionKey: false },
 });
+// Indexes
 jobSchema.index({ title: "text", description: "text" });
 jobSchema.index({ company: 1, isActive: 1 });
 jobSchema.index({ postedBy: 1, isActive: 1 });

@@ -1,9 +1,17 @@
-import { getUserId } from "../utils/routeHelpers";
-import { sendSuccess } from "../utils/responseFormatter";
-import { AppError } from "../utils/errorHandler";
-import { asyncHandler } from "./base.controller";
-import activityService from "../services/activity.service";
+import { getUserId } from "../utils/routeHelpers.js";
+import { sendSuccess } from "../utils/responseFormatter.js";
+import { AppError } from "../utils/errorHandler.js";
+import { asyncHandler } from "./base.controller.js";
+import activityService from "../services/activity.service.js";
+/**
+ * Dashboard Controller
+ * Handles all dashboard, analytics, candidate, and company management
+ */
 class ActivityController {
+    /**
+     * Get activities with filters and pagination
+     * GET /api/dashboard/activities
+     */
     getActivities = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -27,6 +35,10 @@ class ActivityController {
             pagination: result.pagination,
         }, "Activities fetched successfully");
     });
+    /**
+     * Get activity statistics
+     * GET /api/dashboard/activities/stats
+     */
     getActivityStats = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {

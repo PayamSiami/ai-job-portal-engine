@@ -1,3 +1,6 @@
+/**
+ * Safely get a string parameter from req.params
+ */
 export const getStringParam = (param) => {
     if (!param)
         return "";
@@ -6,12 +9,18 @@ export const getStringParam = (param) => {
     }
     return param;
 };
+/**
+ * Safely get user ID from request
+ */
 export const getUserId = (req) => {
     const user = req.user;
     if (!user)
         return null;
     return user.id?.toString() || null;
 };
+/**
+ * Safely get a string query parameter
+ */
 export const getQueryParam = (value) => {
     if (!value)
         return undefined;
@@ -20,6 +29,9 @@ export const getQueryParam = (value) => {
     }
     return value;
 };
+/**
+ * Safely get a number query parameter
+ */
 export const getNumberQueryParam = (value, defaultValue = 0) => {
     const str = getQueryParam(value);
     if (!str)

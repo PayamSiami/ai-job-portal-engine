@@ -2,7 +2,7 @@ import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import logger from "../utils/logger";
+import logger from "../utils/logger.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 class PDFService {
@@ -28,6 +28,7 @@ class PDFService {
     constructor() {
         this.fontsPath = path.join(__dirname, "../../src/assets/fonts");
         this.storagePath = path.join(process.cwd(), "uploads/resumes");
+        // Create directories if they don't exist
         [this.fontsPath, this.storagePath].forEach((dir) => {
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, { recursive: true });
@@ -38,6 +39,9 @@ class PDFService {
             storagePath: this.storagePath,
         });
     }
+    /**
+     * Convert database resume object to ResumeData interface
+     */
     convertToResumeData(resume) {
         return {
             id: resume._id?.toString() || resume.id,
@@ -106,11 +110,16 @@ class PDFService {
             isDefault: resume.isDefault || false,
         };
     }
+    /**
+     * Main method to generate PDF from resume data
+     */
     async generateResumePDF(resume, template = "modern") {
         try {
+            // Convert to ResumeData if it's a database object
             const resumeData = resume._id || resume.id
                 ? this.convertToResumeData(resume)
                 : resume;
+            // Validate required data
             if (!resumeData.personalInfo?.firstName || !resumeData.personalInfo?.lastName) {
                 throw new Error("Resume must have at least first name and last name");
             }
@@ -130,6 +139,7 @@ class PDFService {
                     doc.on("data", (chunk) => chunks.push(chunk));
                     doc.on("end", () => resolve(Buffer.concat(chunks)));
                     doc.on("error", (error) => reject(error));
+                    // Generate template
                     switch (template) {
                         case "modern":
                             this.generateModernTemplate(doc, resumeData);
@@ -146,6 +156,7 @@ class PDFService {
                         default:
                             this.generateModernTemplate(doc, resumeData);
                     }
+                    // Add page numbers
                     const pages = doc.bufferedPageRange();
                     for (let i = 0; i < pages.count; i++) {
                         doc.switchToPage(i);
@@ -174,6 +185,9 @@ class PDFService {
             throw error;
         }
     }
+    /**
+     * Generate and save PDF to storage
+     */
     async generateAndSavePDF(resume, template = "modern") {
         try {
             const pdfBuffer = await this.generateResumePDF(resume, template);
@@ -181,9 +195,11 @@ class PDFService {
             const resumeId = resume._id?.toString() || resume.id || "unknown";
             const filename = `resume-${resumeId}-${timestamp}.pdf`;
             const filePath = path.join(this.storagePath, filename);
+            // Ensure directory exists
             if (!fs.existsSync(this.storagePath)) {
                 fs.mkdirSync(this.storagePath, { recursive: true });
             }
+            // Save file
             fs.writeFileSync(filePath, pdfBuffer);
             const stats = fs.statSync(filePath);
             logger.info("PDF saved successfully", {
@@ -208,6 +224,9 @@ class PDFService {
             throw error;
         }
     }
+    /**
+     * Get PDF file path for a resume
+     */
     getPDFPath(resumeId) {
         try {
             if (!fs.existsSync(this.storagePath)) {
@@ -225,6 +244,9 @@ class PDFService {
             return null;
         }
     }
+    /**
+     * Get all PDFs for a user
+     */
     getUserPDFs(userId) {
         try {
             if (!fs.existsSync(this.storagePath)) {
@@ -240,6 +262,9 @@ class PDFService {
             return [];
         }
     }
+    /**
+     * Delete a PDF file
+     */
     deletePDF(resumeId) {
         try {
             const filePath = this.getPDFPath(resumeId);
@@ -255,6 +280,9 @@ class PDFService {
             return false;
         }
     }
+    /**
+     * Clean up old PDFs (older than 30 days)
+     */
     cleanupOldPDFs(daysOld = 30) {
         try {
             if (!fs.existsSync(this.storagePath)) {
@@ -282,10 +310,16 @@ class PDFService {
             return 0;
         }
     }
+    /**
+     * Get PDF as base64 string
+     */
     async getPDFAsBase64(resume, template = "modern") {
         const buffer = await this.generateResumePDF(resume, template);
         return buffer.toString("base64");
     }
+    // ============================================
+    // HELPER METHODS
+    // ============================================
     formatDate(date) {
         if (!date)
             return "";
@@ -351,16 +385,22 @@ class PDFService {
             .lineTo(x + 100, y + 12)
             .stroke("#A78BFA");
     }
+    // ============================================
+    // TEMPLATE: MODERN
+    // ============================================
     generateModernTemplate(doc, resume) {
         const { personalInfo, experience, education, skills, certifications, languages, projects, } = resume;
+        // Header
         const headerHeight = 140;
         doc.rect(50, 50, 495, headerHeight).fill(this.colors.primary);
         doc.rect(50, 50, 495, 4).fill(this.colors.primaryDark);
+        // Name
         doc
             .fillColor(this.colors.white)
             .fontSize(32)
             .font("Helvetica-Bold")
             .text(`${personalInfo.firstName} ${personalInfo.lastName}`, 70, 70);
+        // Title
         if (personalInfo.title) {
             doc
                 .fillColor("#DBEAFE")
@@ -368,6 +408,7 @@ class PDFService {
                 .font("Helvetica")
                 .text(personalInfo.title, 70, 110);
         }
+        // Contact info in header
         let contactY = 135;
         const contactX = 70;
         const contactItems = [];
@@ -392,6 +433,7 @@ class PDFService {
             });
         }
         let y = 50 + headerHeight + 20;
+        // Summary
         if (personalInfo.summary) {
             doc
                 .fillColor(this.colors.secondary)
@@ -416,10 +458,13 @@ class PDFService {
                 doc.heightOfString(personalInfo.summary, { width: 495, lineGap: 3 }) +
                     20;
         }
+        // TWO-COLUMN LAYOUT
         const leftCol = 50;
         const rightCol = 290;
         const colWidth = 205;
         let leftY = y;
+        // LEFT COLUMN - Skills, Languages, Certifications
+        // Skills
         if (skills && skills.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -431,6 +476,7 @@ class PDFService {
                 .lineTo(leftCol + colWidth, leftY + 16)
                 .stroke(this.colors.primary);
             leftY += 26;
+            // Group skills by category
             const groupedSkills = skills.reduce((acc, skill) => {
                 const category = skill.category || "General";
                 if (!acc[category])
@@ -460,6 +506,7 @@ class PDFService {
             });
             leftY += 10;
         }
+        // Languages
         if (languages && languages.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -488,6 +535,7 @@ class PDFService {
             });
             leftY += 5;
         }
+        // Certifications
         if (certifications && certifications.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -522,7 +570,9 @@ class PDFService {
                 }
             });
         }
+        // RIGHT COLUMN - Experience, Education, Projects
         let rightY = y;
+        // Experience
         if (experience && experience.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -535,11 +585,13 @@ class PDFService {
                 .stroke(this.colors.primary);
             rightY += 26;
             experience.forEach((exp) => {
+                // Position
                 doc
                     .fillColor(this.colors.secondary)
                     .fontSize(10)
                     .font("Helvetica-Bold")
                     .text(exp.position, rightCol, rightY);
+                // Company and date
                 const dateStr = `${this.formatDate(exp.startDate)} - ${exp.current ? "Present" : this.formatDate(exp.endDate)}`;
                 doc
                     .fillColor(this.colors.primary)
@@ -552,6 +604,7 @@ class PDFService {
                     .font("Helvetica")
                     .text(dateStr, rightCol + 120, rightY + 13);
                 rightY += 28;
+                // Description
                 if (exp.description) {
                     doc
                         .fillColor(this.colors.text)
@@ -568,6 +621,7 @@ class PDFService {
                             lineGap: 2,
                         }) + 3;
                 }
+                // Achievements
                 if (exp.achievements && exp.achievements.length > 0) {
                     exp.achievements.forEach((achievement) => {
                         doc
@@ -586,6 +640,7 @@ class PDFService {
                     });
                 }
                 rightY += 10;
+                // Check for page break
                 if (rightY > 720) {
                     doc.addPage();
                     rightY = 50;
@@ -593,6 +648,7 @@ class PDFService {
                 }
             });
         }
+        // Education
         if (education && education.length > 0) {
             if (rightY > 650) {
                 doc.addPage();
@@ -610,11 +666,13 @@ class PDFService {
                 .stroke(this.colors.primary);
             rightY += 26;
             education.forEach((edu) => {
+                // Degree
                 doc
                     .fillColor(this.colors.secondary)
                     .fontSize(10)
                     .font("Helvetica-Bold")
                     .text(edu.degree, rightCol, rightY);
+                // Institution and date
                 const dateStr = `${this.formatDate(edu.startDate)} - ${edu.current ? "Present" : this.formatDate(edu.endDate)}`;
                 doc
                     .fillColor(this.colors.primary)
@@ -659,6 +717,7 @@ class PDFService {
                 rightY += 10;
             });
         }
+        // Projects
         if (projects && projects.length > 0) {
             if (rightY > 650) {
                 doc.addPage();
@@ -710,15 +769,21 @@ class PDFService {
             });
         }
     }
+    /**
+     * CLASSIC TEMPLATE - Traditional, single-column, elegant
+     */
     generateClassicTemplate(doc, resume) {
         const { personalInfo, experience, education, skills, languages, certifications, projects, } = resume;
+        // Header - Classic style
         doc.rect(50, 50, 495, 110).fill("#F1F5F9");
         doc.rect(50, 50, 495, 3).fill(this.colors.secondary);
+        // Name
         doc
             .fillColor(this.colors.secondary)
             .fontSize(28)
             .font("Helvetica-Bold")
             .text(`${personalInfo.firstName} ${personalInfo.lastName}`, 70, 65);
+        // Title
         if (personalInfo.title) {
             doc
                 .fillColor(this.colors.textLight)
@@ -726,6 +791,7 @@ class PDFService {
                 .font("Helvetica")
                 .text(personalInfo.title, 70, 100);
         }
+        // Contact info
         const contactItems = [];
         if (personalInfo.email)
             contactItems.push(personalInfo.email);
@@ -744,6 +810,7 @@ class PDFService {
             align: "center",
         });
         let y = 180;
+        // Summary
         if (personalInfo.summary) {
             doc
                 .fillColor(this.colors.secondary)
@@ -770,6 +837,7 @@ class PDFService {
                     lineGap: 3,
                 }) + 20;
         }
+        // Experience
         if (experience && experience.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -782,6 +850,7 @@ class PDFService {
                 .stroke(this.colors.border);
             y += 28;
             experience.forEach((exp) => {
+                // Position and company
                 doc
                     .fillColor(this.colors.secondary)
                     .fontSize(11)
@@ -839,6 +908,7 @@ class PDFService {
                 }
             });
         }
+        // Education
         if (education && education.length > 0) {
             if (y > 650) {
                 doc.addPage();
@@ -904,6 +974,7 @@ class PDFService {
                 y += 15;
             });
         }
+        // Skills
         if (skills && skills.length > 0) {
             if (y > 650) {
                 doc.addPage();
@@ -930,6 +1001,7 @@ class PDFService {
             });
             y += doc.heightOfString(skillsText, { width: 495 }) + 20;
         }
+        // Languages
         if (languages && languages.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -953,8 +1025,12 @@ class PDFService {
             });
         }
     }
+    /**
+     * MINIMAL TEMPLATE - Clean, lots of whitespace, modern minimalist
+     */
     generateMinimalTemplate(doc, resume) {
         const { personalInfo, experience, education, skills, languages } = resume;
+        // Clean header - just name and title
         doc
             .fillColor(this.colors.secondary)
             .fontSize(34)
@@ -971,7 +1047,9 @@ class PDFService {
                 align: "center",
             });
         }
+        // Divider
         doc.moveTo(100, 115).lineTo(500, 115).stroke(this.colors.border);
+        // Contact
         const contactItems = [];
         if (personalInfo.email)
             contactItems.push(personalInfo.email);
@@ -988,6 +1066,7 @@ class PDFService {
             width: 495,
         });
         let y = 170;
+        // Summary
         if (personalInfo.summary) {
             doc
                 .fillColor(this.colors.text)
@@ -1004,6 +1083,7 @@ class PDFService {
                     lineGap: 3,
                 }) + 25;
         }
+        // Experience
         if (experience && experience.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -1043,6 +1123,7 @@ class PDFService {
                 y += 15;
             });
         }
+        // Education
         if (education && education.length > 0) {
             if (y > 650) {
                 doc.addPage();
@@ -1069,6 +1150,7 @@ class PDFService {
                 y += 28;
             });
         }
+        // Skills
         if (skills && skills.length > 0) {
             if (y > 650) {
                 doc.addPage();
@@ -1090,6 +1172,7 @@ class PDFService {
             });
             y += 20;
         }
+        // Languages
         if (languages && languages.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -1109,14 +1192,21 @@ class PDFService {
             });
         }
     }
+    /**
+     * CREATIVE TEMPLATE - Bold, colorful, modern design with sidebar
+     */
     generateCreativeTemplate(doc, resume) {
         const { personalInfo, experience, education, skills, certifications, languages, projects, } = resume;
+        // Sidebar
         const sidebarWidth = 160;
         const contentX = 50 + sidebarWidth + 25;
         const contentWidth = 495 - sidebarWidth - 25;
+        // Sidebar background
         doc.rect(50, 50, sidebarWidth, 742).fill(this.colors.sidebar);
         doc.rect(50, 50, sidebarWidth, 742).fillOpacity(0.95);
+        // Sidebar content
         let sidebarY = 60;
+        // Avatar placeholder (initial circle)
         doc.circle(50 + sidebarWidth / 2, 80, 35).fill("#6D28D9");
         doc
             .fillColor(this.colors.white)
@@ -1124,6 +1214,7 @@ class PDFService {
             .font("Helvetica-Bold")
             .text(`${personalInfo.firstName[0]}${personalInfo.lastName[0]}`, 50 + sidebarWidth / 2 - 12, 70, { align: "center", width: 24 });
         sidebarY = 130;
+        // Name on sidebar
         doc
             .fillColor(this.colors.white)
             .fontSize(16)
@@ -1142,6 +1233,7 @@ class PDFService {
             align: "center",
         });
         sidebarY += 30;
+        // Contact on sidebar
         this.renderSidebarSection(doc, "CONTACT", 60, sidebarY);
         sidebarY += 18;
         const contactFields = [
@@ -1164,6 +1256,7 @@ class PDFService {
             }
         }
         sidebarY += 10;
+        // Skills on sidebar
         if (skills && skills.length > 0) {
             this.renderSidebarSection(doc, "SKILLS", 60, sidebarY);
             sidebarY += 18;
@@ -1179,6 +1272,7 @@ class PDFService {
             });
             sidebarY += 10;
         }
+        // Languages on sidebar
         if (languages && languages.length > 0) {
             this.renderSidebarSection(doc, "LANGUAGES", 60, sidebarY);
             sidebarY += 18;
@@ -1195,6 +1289,7 @@ class PDFService {
             });
             sidebarY += 10;
         }
+        // Certifications on sidebar
         if (certifications && certifications.length > 0) {
             this.renderSidebarSection(doc, "CERTIFICATIONS", 60, sidebarY);
             sidebarY += 18;
@@ -1217,7 +1312,9 @@ class PDFService {
                 sidebarY += 13;
             });
         }
+        // MAIN CONTENT
         let y = 60;
+        // Summary
         if (personalInfo.summary) {
             doc
                 .fillColor(this.colors.secondary)
@@ -1240,6 +1337,7 @@ class PDFService {
                     lineGap: 3,
                 }) + 20;
         }
+        // Experience
         if (experience && experience.length > 0) {
             doc
                 .fillColor(this.colors.secondary)
@@ -1248,6 +1346,7 @@ class PDFService {
                 .text("Experience", contentX, y);
             y += 18;
             experience.forEach((exp) => {
+                // Colored accent line
                 doc.rect(contentX, y, 4, 14).fill(this.colors.primary);
                 doc
                     .fillColor(this.colors.secondary)
@@ -1303,11 +1402,13 @@ class PDFService {
                 if (y > 720) {
                     doc.addPage();
                     y = 50;
+                    // Re-draw sidebar on new page
                     doc.rect(50, 50, sidebarWidth, 742).fill(this.colors.sidebar);
                     doc.rect(50, 50, sidebarWidth, 742).fillOpacity(0.95);
                 }
             });
         }
+        // Education
         if (education && education.length > 0) {
             if (y > 650) {
                 doc.addPage();
@@ -1359,6 +1460,7 @@ class PDFService {
                 y += 15;
             });
         }
+        // Projects
         if (projects && projects.length > 0) {
             if (y > 650) {
                 doc.addPage();

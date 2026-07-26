@@ -1,11 +1,16 @@
+// services/resume.service.ts
 import { Types } from "mongoose";
-import Resume from "../models/Resume.models";
-import { AppError } from "../utils/errorHandler";
-import logger from "../utils/logger";
+import Resume from "../models/Resume.models.js";
+import { AppError } from "../utils/errorHandler.js";
+import logger from "../utils/logger.js";
 class ResumeService {
+    /**
+     * Get all resumes for a user with pagination and filtering
+     */
     async getResumesByUser(userId, options) {
         try {
             const { status, page, limit, search, sortBy = "createdAt", sortOrder = "desc" } = options;
+            // Build filter
             const filter = { user: new Types.ObjectId(userId) };
             if (status && status !== "all") {
                 filter.status = status;
@@ -17,9 +22,11 @@ class ResumeService {
                     { "personalInfo.lastName": { $regex: search, $options: "i" } },
                 ];
             }
+            // Pagination
             const skip = (page - 1) * limit;
             const sortOptions = {};
             sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1;
+            // Execute query
             const [resumes, total] = await Promise.all([
                 Resume.find(filter)
                     .sort(sortOptions)
@@ -44,6 +51,9 @@ class ResumeService {
             throw new AppError("Failed to fetch resumes", 500);
         }
     }
+    /**
+     * Get a single resume by ID
+     */
     async getResume(resumeId, userId) {
         try {
             const resume = await Resume.findOne({
@@ -57,8 +67,12 @@ class ResumeService {
             throw new AppError("Failed to fetch resume", 500);
         }
     }
+    /**
+     * Create a new resume
+     */
     async createResume(userId, data) {
         try {
+            // If this is the first resume or isDefault is true, set other resumes as not default
             if (data.isDefault) {
                 await Resume.updateMany({ user: new Types.ObjectId(userId) }, { isDefault: false });
             }
@@ -74,8 +88,12 @@ class ResumeService {
             throw new AppError("Failed to create resume", 400);
         }
     }
+    /**
+     * Update an existing resume
+     */
     async updateResume(resumeId, userId, data) {
         try {
+            // If setting as default, unset other defaults
             if (data.isDefault) {
                 await Resume.updateMany({ user: new Types.ObjectId(userId) }, { isDefault: false });
             }
@@ -101,6 +119,9 @@ class ResumeService {
             throw new AppError("Failed to update resume", 400);
         }
     }
+    /**
+     * Delete a resume
+     */
     async deleteResume(resumeId, userId) {
         try {
             const result = await Resume.findOneAndDelete({
@@ -119,6 +140,9 @@ class ResumeService {
             throw new AppError("Failed to delete resume", 500);
         }
     }
+    /**
+     * Duplicate an existing resume
+     */
     async duplicateResume(resumeId, userId) {
         try {
             const sourceResume = await Resume.findOne({
@@ -128,6 +152,7 @@ class ResumeService {
             if (!sourceResume) {
                 throw new AppError("Source resume not found", 404);
             }
+            // Create new resume from source
             const newResume = await Resume.create({
                 user: new Types.ObjectId(userId),
                 title: `${sourceResume.title} (Copy)`,
@@ -153,9 +178,14 @@ class ResumeService {
             throw new AppError("Failed to duplicate resume", 500);
         }
     }
+    /**
+     * Set a resume as default
+     */
     async setDefaultResume(resumeId, userId) {
         try {
+            // First, unset all defaults for this user
             await Resume.updateMany({ user: new Types.ObjectId(userId) }, { isDefault: false });
+            // Then set the specific resume as default
             const resume = await Resume.findOneAndUpdate({
                 _id: new Types.ObjectId(resumeId),
                 user: new Types.ObjectId(userId),
@@ -178,6 +208,9 @@ class ResumeService {
             throw new AppError("Failed to set default resume", 500);
         }
     }
+    /**
+     * Get resume statistics for a user
+     */
     async getUserResumeStats(userId) {
         try {
             const stats = await Resume.aggregate([
@@ -252,6 +285,9 @@ class ResumeService {
             throw new AppError("Failed to get resume statistics", 500);
         }
     }
+    /**
+     * Bulk delete resumes
+     */
     async bulkDeleteResumes(resumeIds, userId) {
         try {
             const objectIds = resumeIds.map(id => new Types.ObjectId(id));
@@ -271,6 +307,9 @@ class ResumeService {
             throw new AppError("Failed to delete resumes", 500);
         }
     }
+    /**
+     * Get default resume for a user
+     */
     async getDefaultResume(userId) {
         try {
             const resume = await Resume.findOne({
@@ -284,6 +323,9 @@ class ResumeService {
             throw new AppError("Failed to get default resume", 500);
         }
     }
+    /**
+     * Search resumes by keyword
+     */
     async searchResumes(userId, query) {
         try {
             const resumes = await Resume.find({
@@ -303,6 +345,9 @@ class ResumeService {
             throw new AppError("Failed to search resumes", 500);
         }
     }
+    /**
+     * Update resume status
+     */
     async updateResumeStatus(resumeId, userId, status) {
         try {
             const resume = await Resume.findOneAndUpdate({
@@ -327,11 +372,14 @@ class ResumeService {
             throw new AppError("Failed to update resume status", 500);
         }
     }
+    /**
+     * Get resumes by template type - FIXED VERSION
+     */
     async getResumesByTemplate(userId, template) {
         try {
             const resumes = await Resume.find({
                 user: new Types.ObjectId(userId),
-                template: template,
+                template: template, // Now properly typed
             }).lean();
             return resumes;
         }
@@ -340,6 +388,9 @@ class ResumeService {
             throw new AppError("Failed to fetch resumes", 500);
         }
     }
+    /**
+     * Get recent resumes (last 30 days)
+     */
     async getRecentResumes(userId, days = 30) {
         try {
             const date = new Date();
@@ -357,6 +408,9 @@ class ResumeService {
             throw new AppError("Failed to fetch recent resumes", 500);
         }
     }
+    /**
+     * Check if user has resumes
+     */
     async hasResumes(userId) {
         try {
             const count = await Resume.countDocuments({
@@ -369,9 +423,15 @@ class ResumeService {
             return false;
         }
     }
+    /**
+     * Get resumes by user ID (alias for getResumesByUser)
+     */
     async getResumesByUserId(userId, options) {
         return this.getResumesByUser(userId, options);
     }
+    /**
+     * Get template statistics
+     */
     async getTemplateStats(userId) {
         try {
             const stats = await Resume.aggregate([
@@ -405,6 +465,9 @@ class ResumeService {
             throw new AppError("Failed to get template statistics", 500);
         }
     }
+    /**
+     * Get status statistics
+     */
     async getStatusStats(userId) {
         try {
             const stats = await Resume.aggregate([
@@ -430,6 +493,9 @@ class ResumeService {
             throw new AppError("Failed to get status statistics", 500);
         }
     }
+    /**
+     * Get resume count by user
+     */
     async getResumeCount(userId) {
         try {
             return await Resume.countDocuments({

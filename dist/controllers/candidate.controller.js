@@ -1,14 +1,23 @@
-import { getUserId } from "../utils/routeHelpers";
-import { sendSuccess } from "../utils/responseFormatter";
-import { AppError } from "../utils/errorHandler";
-import { asyncHandler } from "./base.controller";
-import candidateService from "../services/candidate.service";
+import { getUserId } from "../utils/routeHelpers.js";
+import { sendSuccess } from "../utils/responseFormatter.js";
+import { AppError } from "../utils/errorHandler.js";
+import { asyncHandler } from "./base.controller.js";
+import candidateService from "../services/candidate.service.js";
+/**
+ * Dashboard Controller
+ * Handles all dashboard, analytics, candidate, and company management
+ */
 class CandidateController {
+    /**
+     * Get candidates with filters and pagination
+     * GET /api/dashboard/candidates
+     */
     getCandidates = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
             throw new AppError("User not authenticated", 401);
         }
+        // Extract filters from query
         const filters = {
             search: req.query.search,
             status: req.query.status,
@@ -24,12 +33,14 @@ class CandidateController {
             location: req.query.location,
             availability: req.query.availability,
         };
+        // Extract pagination options
         const options = {
             page: req.query.page ? Number(req.query.page) : 1,
             limit: req.query.limit ? Number(req.query.limit) : 10,
             sortBy: req.query.sortBy || "createdAt",
             sortOrder: req.query.sortOrder || "desc",
         };
+        // Remove undefined filters
         Object.keys(filters).forEach((key) => filters[key] === undefined &&
             delete filters[key]);
         const result = await candidateService.getCandidates(userId, filters, options);
@@ -45,6 +56,10 @@ class CandidateController {
             },
         }, "Candidates fetched successfully");
     });
+    /**
+     * Get AI-powered candidate recommendations
+     * GET /api/dashboard/candidates/recommendations
+     */
     getCandidateRecommendations = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -69,6 +84,10 @@ class CandidateController {
             params,
         }, "Candidate recommendations fetched successfully");
     });
+    /**
+     * Get candidate by ID
+     * GET /api/dashboard/candidates/:id
+     */
     getCandidateById = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         const candidateId = req.params.id;
@@ -84,6 +103,10 @@ class CandidateController {
         }
         sendSuccess(res, candidate, "Candidate fetched successfully");
     });
+    /**
+     * Update candidate status
+     * PUT /api/dashboard/candidates/:id/status
+     */
     updateCandidateStatus = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         const candidateId = req.params.id;
@@ -97,6 +120,7 @@ class CandidateController {
         if (!status) {
             throw new AppError("Status is required", 400);
         }
+        // Validate status
         const validStatuses = [
             "pending",
             "reviewing",
@@ -114,6 +138,10 @@ class CandidateController {
         }
         sendSuccess(res, updated, "Candidate status updated successfully");
     });
+    /**
+     * Get candidate resume
+     * GET /api/dashboard/candidates/:id/resume
+     */
     getCandidateResume = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         const candidateId = req.params.id;
@@ -127,20 +155,24 @@ class CandidateController {
         if (!resume) {
             throw new AppError("Resume not found or access denied", 404);
         }
+        // If resume is a Buffer or file path, send it
         if (Buffer.isBuffer(resume)) {
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader("Content-Disposition", `attachment; filename="candidate-resume-${candidateId}.pdf"`);
             res.send(resume);
             return;
         }
+        // If resume is a URL, redirect or send JSON response
         if (typeof resume === "string" && resume.startsWith("http")) {
             sendSuccess(res, { resumeUrl: resume }, "Resume URL fetched successfully");
             return;
         }
+        // If resume is an object with file data
         if (typeof resume === "object" && resume !== null) {
             sendSuccess(res, resume, "Resume fetched successfully");
             return;
         }
+        // Default: send the resume data
         sendSuccess(res, { resume }, "Resume fetched successfully");
     });
     bulkUpdateCandidateStatus = asyncHandler(async (req, res) => {
@@ -183,6 +215,10 @@ class CandidateController {
             failedDetails: failed,
         }, `Updated ${succeeded.length} candidates`);
     });
+    /**
+     * Bulk delete candidates
+     * DELETE /api/dashboard/candidates/bulk
+     */
     bulkDeleteCandidates = asyncHandler(async (req, res) => {
         const userId = getUserId(req);
         if (!userId) {
@@ -197,12 +233,15 @@ class CandidateController {
         if (candidateIds.length > 50) {
             throw new AppError("Cannot delete more than 50 candidates at once", 400);
         }
+        // Confirm deletion
         const { confirm } = req.query;
         if (confirm !== "true") {
             throw new AppError("Please confirm deletion with ?confirm=true", 400);
         }
+        // Delete each candidate
         const results = await Promise.all(candidateIds.map(async (candidateId) => {
             try {
+                // Update status to "rejected" instead of hard delete
                 const updated = await candidateService.updateCandidateStatus(candidateId, userId, "rejected", "Bulk deleted");
                 return { candidateId, success: true };
             }

@@ -1,3 +1,4 @@
+// backend/src/models/Application.model.ts
 import mongoose, { Schema } from "mongoose";
 export var ApplicationStatus;
 (function (ApplicationStatus) {
@@ -116,6 +117,7 @@ const applicationSchema = new Schema({
     toJSON: { versionKey: false },
     toObject: { versionKey: false },
 });
+// Indexes
 applicationSchema.index({ job: 1, userId: 1 }, { unique: true });
 applicationSchema.index({ userId: 1, status: 1 });
 applicationSchema.index({ job: 1, status: 1 });

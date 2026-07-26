@@ -1,7 +1,9 @@
+// src/services/ai/coverLetterGenerator.ts
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
-import { config } from "../../config/index";
-import hashString from "../../utils/hashString";
+import { config } from "../../config/index.js";
+import hashString from "../../utils/hashString.js";
+// ============ Service Class ============
 class CoverLetterGeneratorService {
     genAI;
     model;
@@ -9,10 +11,11 @@ class CoverLetterGeneratorService {
     DEFAULT_MAX_WORDS = 250;
     MAX_RESUME_LENGTH = 4000;
     MAX_JOB_DETAILS_LENGTH = 3000;
-    CACHE_TTL = 3600;
+    CACHE_TTL = 3600; // 1 hour
     isAIEnabled = false;
     constructor() {
         const apiKey = config.GEMINI_API_KEY;
+        // ✅ Check if API key exists
         if (!apiKey) {
             console.warn("⚠️ GEMINI_API_KEY not found. AI features will be disabled.");
             this.isAIEnabled = false;
@@ -26,6 +29,7 @@ class CoverLetterGeneratorService {
                     topP: 0.9,
                     maxOutputTokens: 600,
                 };
+                // ✅ Try different model versions
                 const modelName = this.getAvailableModel();
                 if (modelName) {
                     this.model = this.genAI.getGenerativeModel({
@@ -45,28 +49,42 @@ class CoverLetterGeneratorService {
                 this.isAIEnabled = false;
             }
         }
+        // Initialize cache
         this.cache = new NodeCache({
             stdTTL: this.CACHE_TTL,
             checkperiod: 120,
         });
     }
+    /**
+     * Try to find an available model
+     */
     getAvailableModel() {
         const models = ["gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro"];
+        // Return the first model that works (or default to gemini-pro)
+        // In production, you might want to test each one
         return models[0] || "gemini-pro";
     }
+    /**
+     * Generate a tailored cover letter based on job details and resume
+     */
     async generateCoverLetter(jobDetails, resumeText, options = {}) {
         const startTime = Date.now();
         const { maxWords = this.DEFAULT_MAX_WORDS, tone = "professional", retryCount = 2, useCache = true, focusSkills, includeAchievements = true, } = options;
+        // ✅ If AI is disabled, use fallback
         if (!this.isAIEnabled || !this.model) {
             console.warn("⚠️ AI not available, using fallback cover letter generation");
             return this.generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime);
         }
         let lastError = null;
         try {
+            // Validate inputs
             this.validateInputs(jobDetails, resumeText);
+            // Truncate inputs if they're too long
             const truncatedResume = this.truncateText(resumeText, this.MAX_RESUME_LENGTH);
             const truncatedJobDetails = this.truncateJobDetails(jobDetails, this.MAX_JOB_DETAILS_LENGTH);
+            // Generate cache key
             const cacheKey = this.generateCacheKey(truncatedJobDetails, truncatedResume, maxWords, tone, focusSkills);
+            // Check cache
             if (useCache) {
                 const cachedResult = this.cache.get(cacheKey);
                 if (cachedResult) {
@@ -81,10 +99,13 @@ class CoverLetterGeneratorService {
                     const prompt = this.buildPrompt(truncatedJobDetails, truncatedResume, maxWords, tone, focusSkills, includeAchievements);
                     const result = await this.model.generateContent(prompt);
                     const coverLetter = result.response.text().trim();
+                    // Validate the generated cover letter
                     if (!coverLetter || coverLetter.length < 50) {
                         throw new Error("Generated cover letter is too short or empty");
                     }
+                    // Format result
                     const formattedResult = this.formatResult(coverLetter, true, undefined, tone, startTime);
+                    // Store in cache
                     if (useCache) {
                         this.cache.set(cacheKey, formattedResult);
                     }
@@ -93,6 +114,7 @@ class CoverLetterGeneratorService {
                 catch (error) {
                     lastError = error;
                     console.error(`Cover letter generation attempt ${attempt + 1} failed:`, error);
+                    // ✅ If it's a 403 error, don't retry (API key issue)
                     if (error instanceof Error && error.message.includes("403")) {
                         console.error("❌ API key issue detected. Using fallback.");
                         return this.generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime);
@@ -110,10 +132,16 @@ class CoverLetterGeneratorService {
             return this.generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime);
         }
     }
+    /**
+     * Generate fallback cover letter without AI
+     */
     generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime) {
+        // Extract name from resume (simple heuristic)
         const nameMatch = resumeText.match(/[A-Z][a-z]+ [A-Z][a-z]+/);
         const name = nameMatch ? nameMatch[0] : "Candidate";
+        // Extract skills from resume
         const skills = this.extractSkills(resumeText);
+        // Build a template-based cover letter
         const templates = {
             professional: `
 Dear Hiring Manager,
@@ -143,6 +171,9 @@ ${name}
         const content = templates[tone] || templates.professional;
         return this.formatResult(content, true, undefined, tone, startTime);
     }
+    /**
+     * Extract skills from resume text
+     */
     extractSkills(resumeText) {
         const commonSkills = [
             "JavaScript",
@@ -182,6 +213,9 @@ ${name}
             ? foundSkills.slice(0, 5)
             : ["professional experience", "dedication", "team collaboration"];
     }
+    /**
+     * Validate inputs
+     */
     validateInputs(jobDetails, resumeText) {
         if (!jobDetails.title || jobDetails.title.trim().length === 0) {
             throw new Error("Job title is required");
@@ -193,6 +227,9 @@ ${name}
             throw new Error("Resume text must be at least 50 characters");
         }
     }
+    /**
+     * Build the AI prompt
+     */
     buildPrompt(jobDetails, resumeText, maxWords, tone, focusSkills, includeAchievements = true) {
         const toneDescriptions = {
             professional: "formal and business-like, highlighting qualifications professionally",
@@ -247,6 +284,9 @@ ${name}
     `;
         return prompt;
     }
+    /**
+     * Format the result
+     */
     formatResult(content, success, error, tone, startTime) {
         const wordCount = this.countWords(content);
         const result = {
@@ -268,18 +308,30 @@ ${name}
         }
         return result;
     }
+    /**
+     * Count words in text
+     */
     countWords(text) {
         return text.trim().split(/\s+/).length;
     }
+    /**
+     * Delay helper
+     */
     delay(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
+    /**
+     * Truncate text
+     */
     truncateText(text, maxLength) {
         if (text.length <= maxLength) {
             return text;
         }
         return text.substring(0, maxLength) + "... (truncated)";
     }
+    /**
+     * Truncate job details
+     */
     truncateJobDetails(jobDetails, maxLength) {
         const combined = `${jobDetails.title} ${jobDetails.company} ${jobDetails.location} ${jobDetails.requirements} ${jobDetails.description}`;
         if (combined.length <= maxLength) {
@@ -294,6 +346,9 @@ ${name}
         }
         return truncated;
     }
+    /**
+     * Generate cache key
+     */
     generateCacheKey(jobDetails, resumeText, maxWords, tone, focusSkills) {
         const data = {
             jobHash: hashString(`${jobDetails.title}|${jobDetails.company}|${jobDetails.requirements.substring(0, 100)}`),
@@ -304,10 +359,16 @@ ${name}
         };
         return `coverletter:${JSON.stringify(data)}`;
     }
+    /**
+     * Clear cache
+     */
     clearCache() {
         this.cache.flushAll();
         console.log("Cover letter cache cleared");
     }
+    /**
+     * Get cache statistics
+     */
     getCacheStats() {
         const keys = this.cache.keys();
         return {

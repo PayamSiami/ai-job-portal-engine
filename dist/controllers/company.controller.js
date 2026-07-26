@@ -1,6 +1,6 @@
-import { catchAsync } from "../utils/catchAsync";
-import { AppError } from "../utils/errorHandler";
-import companyService from "../services/company.service";
+import { catchAsync } from "../utils/catchAsync.js";
+import { AppError } from "../utils/errorHandler.js";
+import companyService from "../services/company.service.js";
 export class CompanyController {
     createCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -8,6 +8,7 @@ export class CompanyController {
         if (!data.name) {
             throw new AppError("Company name is required", 400);
         }
+        // Check if employer already has a company
         const existingCompany = await companyService.hasCompany(userId);
         if (existingCompany) {
             throw new AppError("You already have a company registered", 400);

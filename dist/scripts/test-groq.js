@@ -1,9 +1,11 @@
+// backend/src/scripts/test-groq.ts
 import dotenv from 'dotenv';
 dotenv.config();
-import { testGroqConnection, generateWithGroq } from '../services/ai/groq.service';
+import { testGroqConnection, generateWithGroq } from '../services/ai/groq.service.js';
 async function testGroq() {
     console.log('🔍 Testing Groq Service...');
     console.log('📍 Country: AZ (Azerbaijan)');
+    // Check API Key
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
         console.log('❌ GROQ_API_KEY not found in .env');
@@ -11,6 +13,7 @@ async function testGroq() {
         return;
     }
     console.log('🔑 API Key:', apiKey.substring(0, 10) + '...');
+    // Test 1: Connection
     console.log('\n🔗 Testing connection...');
     const connection = await testGroqConnection();
     if (connection.success) {
@@ -26,6 +29,7 @@ async function testGroq() {
         console.log('   4. Try getting a new API key from console.groq.com');
         return;
     }
+    // Test 2: Generate Content
     console.log('\n🤖 Testing content generation...');
     const result = await generateWithGroq('Write a short professional summary for a software engineer with 5 years of experience.');
     if (result.success) {

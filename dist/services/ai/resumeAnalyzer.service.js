@@ -1,18 +1,21 @@
+// src/services/ai/resumeAnalyzer.ts
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
-import { config } from "../../config/index";
-import logger from "../../utils/logger";
-import hashString from "../../utils/hashString";
+import { config } from "../../config/index.js";
+import logger from "../../utils/logger.js";
+import hashString from "../../utils/hashString.js";
+// ============ Service Class ============
 class ResumeAnalyzerService {
     genAI;
     model;
     cache;
     MAX_RESUME_LENGTH = 4000;
     MAX_JOB_DETAILS_LENGTH = 2000;
-    DEFAULT_CACHE_TTL = 3600;
+    DEFAULT_CACHE_TTL = 3600; // 1 hour
     isAIEnabled = false;
     constructor() {
         const apiKey = config.GEMINI_API_KEY;
+        // ✅ Check if API key exists
         if (!apiKey) {
             console.warn("⚠️ GEMINI_API_KEY not found. AI features will be disabled.");
             this.isAIEnabled = false;
@@ -26,6 +29,7 @@ class ResumeAnalyzerService {
                     topP: 0.8,
                     maxOutputTokens: 800,
                 };
+                // ✅ Try different model versions
                 const modelName = this.getAvailableModel();
                 if (modelName) {
                     this.model = this.genAI.getGenerativeModel({
@@ -45,25 +49,34 @@ class ResumeAnalyzerService {
                 this.isAIEnabled = false;
             }
         }
+        // Initialize cache
         this.cache = new NodeCache({
             stdTTL: this.DEFAULT_CACHE_TTL,
             checkperiod: 120,
         });
     }
+    /**
+     * Analyze resume against job requirements
+     */
     async analyzeResumeVsJob(resumeText, jobRequirements, jobDescription, options = {}) {
         const startTime = Date.now();
         const { retryCount = 2, useCache = true, industry, targetRole } = options;
+        // ✅ If AI is disabled, use fallback
         if (!this.isAIEnabled || !this.model) {
             console.warn("⚠️ AI not available, using fallback analysis");
             return this.getFallbackAnalysisResult(startTime);
         }
         let lastError = null;
+        // Validate inputs
         this.validateResumeInput(resumeText);
         this.validateJobInput(jobRequirements, jobDescription);
+        // Truncate inputs
         const truncatedResume = this.truncateText(resumeText, this.MAX_RESUME_LENGTH);
         const truncatedRequirements = this.truncateText(jobRequirements, this.MAX_JOB_DETAILS_LENGTH);
         const truncatedDescription = this.truncateText(jobDescription, this.MAX_JOB_DETAILS_LENGTH);
+        // Generate cache key
         const cacheKey = this.generateAnalysisCacheKey(truncatedResume, truncatedRequirements, truncatedDescription, industry, targetRole);
+        // Check cache
         if (useCache) {
             const cached = this.cache.get(cacheKey);
             if (cached) {
@@ -91,6 +104,7 @@ class ResumeAnalyzerService {
                 });
                 const cleanedText = this.cleanAIResponse(responseText);
                 const parsed = this.parseAndValidateAnalysis(cleanedText);
+                // Add metadata
                 const finalResult = {
                     ...parsed,
                     metadata: {
@@ -100,6 +114,7 @@ class ResumeAnalyzerService {
                         fromCache: false,
                     },
                 };
+                // Store in cache
                 if (useCache) {
                     this.cache.set(cacheKey, finalResult);
                 }
@@ -111,6 +126,7 @@ class ResumeAnalyzerService {
                     error: error instanceof Error ? error.message : "Unknown error",
                     stack: error instanceof Error ? error.stack : undefined,
                 });
+                // ✅ If it's a 403 error, don't retry (API key issue)
                 if (error instanceof Error && error.message.includes("403")) {
                     console.error("❌ API key issue detected. Using fallback.");
                     return this.getFallbackAnalysisResult(startTime);
@@ -125,6 +141,7 @@ class ResumeAnalyzerService {
         logger.error("All analysis attempts failed:", lastError);
         return this.getFallbackAnalysisResult(startTime);
     }
+    // ============ Private Helper Methods ============
     buildAnalysisPrompt(resumeText, jobRequirements, jobDescription, industry, targetRole) {
         return `
 You are an expert resume analyzer and career coach. Analyze the following resume against the job requirements and provide a detailed match analysis.
@@ -207,6 +224,9 @@ Provide specific, actionable suggestions.
             return this.extractDataFromText(text);
         }
     }
+    /**
+     * Try to find an available model
+     */
     getAvailableModel() {
         const models = ["gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro"];
         return models[0] || "gemini-pro";
@@ -292,6 +312,7 @@ Provide specific, actionable suggestions.
     delay(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
+    // ============ Public Utility Methods ============
     clearCache() {
         this.cache.flushAll();
         console.log("Resume analyzer cache cleared");
@@ -304,22 +325,29 @@ Provide specific, actionable suggestions.
             stats: this.cache.getStats(),
         };
     }
+    /**
+     * ✅ Get improvement suggestions for a resume
+     */
     async getImprovementSuggestions(resumeContent, options = {}) {
         try {
             const { includeContentSuggestions = true, includeFormattingSuggestions = true, includeKeywordSuggestions = true, includeActionVerbs = true, } = options;
+            // Check cache
             const cacheKey = `improvements_${resumeContent.substring(0, 100)}`;
-            const cachedResult = this.cache.get(cacheKey);
+            const cachedResult = this.cache.get(cacheKey); // ✅ Use get with type
             if (cachedResult) {
                 logger.info(`✅ Returning cached improvements for ${cacheKey}`);
                 return cachedResult;
             }
+            // If AI model is not available, return fallback suggestions
             if (!this.model) {
                 return this.getFallbackImprovements(resumeContent);
             }
+            // Build prompt for improvement suggestions
             const prompt = this.buildImprovementPrompt(resumeContent, includeContentSuggestions, includeFormattingSuggestions, includeKeywordSuggestions, includeActionVerbs);
             const result = await this.model.generateContent(prompt);
             const response = result.response.text();
             const suggestions = this.parseImprovementSuggestions(response);
+            // Cache results
             this.cache.set(cacheKey, suggestions);
             return suggestions;
         }
@@ -328,6 +356,9 @@ Provide specific, actionable suggestions.
             return this.getFallbackImprovements(resumeContent);
         }
     }
+    /**
+     * Build improvement suggestion prompt
+     */
     buildImprovementPrompt(resumeContent, includeContent, includeFormatting, includeKeywords, includeActionVerbs) {
         let prompt = `
       You are an expert resume reviewer. Analyze the following resume and provide detailed improvement suggestions.
@@ -388,13 +419,18 @@ Provide specific, actionable suggestions.
     `;
         return prompt;
     }
+    /**
+     * Parse improvement suggestions from AI response
+     */
     parseImprovementSuggestions(response) {
         try {
+            // Try to extract JSON from the response
             const jsonMatch = response.match(/\[[\s\S]*\]/);
             if (!jsonMatch) {
                 throw new Error("No JSON array found in response");
             }
             const suggestions = JSON.parse(jsonMatch[0]);
+            // Validate and format suggestions
             return suggestions.map((s) => ({
                 category: s.category || "General",
                 priority: s.priority || "medium",
@@ -409,8 +445,12 @@ Provide specific, actionable suggestions.
             return this.getFallbackImprovements("");
         }
     }
+    /**
+     * Get fallback improvements when AI is unavailable
+     */
     getFallbackImprovements(resumeContent) {
         const suggestions = [];
+        // Check for common issues
         if (!resumeContent || resumeContent.length < 100) {
             suggestions.push({
                 category: "Content",
@@ -421,6 +461,7 @@ Provide specific, actionable suggestions.
                 reason: "Recruiters expect detailed resumes",
             });
         }
+        // Check for missing sections
         if (!resumeContent.includes("experience") &&
             !resumeContent.includes("Experience")) {
             suggestions.push({
@@ -442,6 +483,7 @@ Provide specific, actionable suggestions.
                 reason: "Skills are crucial for ATS screening",
             });
         }
+        // Check for quantified achievements
         const hasNumbers = /\d+/.test(resumeContent);
         if (!hasNumbers) {
             suggestions.push({
@@ -453,6 +495,7 @@ Provide specific, actionable suggestions.
                 reason: "Quantified achievements are more impactful",
             });
         }
+        // Add general suggestions
         suggestions.push({
             category: "Formatting",
             priority: "medium",

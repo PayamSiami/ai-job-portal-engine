@@ -1,6 +1,6 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
-import { config } from "./index";
+import { config } from "./index.js";
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -37,6 +37,7 @@ const swaggerOptions = {
                 },
             },
             schemas: {
+                // Auth schemas
                 RegisterRequest: {
                     type: "object",
                     required: ["username", "email", "password"],
@@ -113,6 +114,7 @@ const swaggerOptions = {
                         data: { type: "object" },
                     },
                 },
+                // User schemas
                 User: {
                     type: "object",
                     properties: {
@@ -222,6 +224,7 @@ const swaggerOptions = {
                         newPassword: { type: "string", minLength: 6 },
                     },
                 },
+                // Job schemas
                 Job: {
                     type: "object",
                     properties: {
@@ -339,6 +342,7 @@ const swaggerOptions = {
                         maxSalary: { type: "number" },
                     },
                 },
+                // Application schemas
                 Application: {
                     type: "object",
                     properties: {
@@ -377,6 +381,7 @@ const swaggerOptions = {
                         availableFrom: { type: "string", format: "date-time" },
                     },
                 },
+                // Resume schemas
                 Resume: {
                     type: "object",
                     properties: {
@@ -443,6 +448,7 @@ const swaggerOptions = {
                         summary: { type: "string" },
                     },
                 },
+                // AI schemas
                 ResumeAnalysisResponse: {
                     type: "object",
                     properties: {
@@ -535,6 +541,7 @@ const swaggerOptions = {
                         recommendation: { type: "string" },
                     },
                 },
+                // Admin schemas
                 UserStats: {
                     type: "object",
                     properties: {
@@ -581,6 +588,7 @@ const swaggerOptions = {
                         },
                     },
                 },
+                // Company schemas
                 Company: {
                     type: "object",
                     properties: {
@@ -843,6 +851,7 @@ const swaggerOptions = {
                         },
                     },
                 },
+                // Query parameters
                 PaginationQuery: {
                     type: "object",
                     properties: {

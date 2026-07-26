@@ -1,23 +1,31 @@
-import { Company, CompanyStatus } from "../models/Company.models";
-import Job from "../models/Job.models";
-import Application from "../models/Application.model";
-import User from "../models/User.models";
-import { AppError } from "../utils/errorHandler";
-import Resume from "../models/Resume.models";
+// backend/src/services/company.service.ts
+import { Company, CompanyStatus } from "../models/Company.models.js";
+import Job from "../models/Job.models.js";
+import Application from "../models/Application.model.js";
+import User from "../models/User.models.js";
+import { AppError } from "../utils/errorHandler.js";
+import Resume from "../models/Resume.models.js";
 class CompanyService {
+    /**
+     * Create a new company
+     */
     async createCompany(userId, data) {
+        // Check if user exists
         const user = await User.findById(userId);
         if (!user) {
             throw new Error("User not found");
         }
+        // Check if user already has a company
         const existingCompany = await Company.findOne({ ownerId: userId });
         if (existingCompany) {
             throw new Error("User already has a company");
         }
+        // Check if company name is taken
         const nameExists = await Company.findOne({ name: data.name });
         if (nameExists) {
             throw new Error("Company name already exists");
         }
+        // Create company
         const company = new Company({
             ...data,
             ownerId: userId,
@@ -28,17 +36,27 @@ class CompanyService {
         await company.save();
         return company;
     }
+    /**
+     * Get company by ID
+     */
     async getCompanyById(companyId) {
         return Company.findById(companyId);
     }
+    /**
+     * Get company by owner ID
+     */
     async getCompanyByOwnerId(userId) {
         return Company.findOne({ ownerId: userId });
     }
+    /**
+     * Get company with statistics
+     */
     async getCompanyWithStats(userId) {
         const company = await Company.findOne({ ownerId: userId });
         if (!company) {
             return null;
         }
+        // Get job statistics
         const jobs = await Job.find({ employerId: userId });
         const jobIds = jobs.map((job) => job._id);
         const applications = await Application.find({
@@ -53,11 +71,16 @@ class CompanyService {
             totalHires: applications.filter((a) => a.status === "hired").length,
         };
     }
+    /**
+     * Update company
+     */
     async updateCompany(userId, companyId, data) {
+        // Verify ownership
         const company = await Company.findOne({ _id: companyId, ownerId: userId });
         if (!company) {
             throw new Error("Company not found or unauthorized");
         }
+        // Prevent duplicate name
         if (data.name && data.name !== company.name) {
             const nameExists = await Company.findOne({
                 name: data.name,
@@ -67,18 +90,26 @@ class CompanyService {
                 throw new Error("Company name already exists");
             }
         }
+        // Update
         const updated = await Company.findByIdAndUpdate(companyId, { $set: data }, { new: true, runValidators: true });
         return updated;
     }
+    /**
+     * Upload company logo
+     */
     async uploadLogo(userId, file) {
         const company = await Company.findOne({ ownerId: userId });
         if (!company) {
             throw new Error("Company not found");
         }
+        // In production, upload to S3 or Cloudinary
         const logoUrl = `/uploads/companies/${company._id}/logo-${Date.now()}.${file.originalname.split(".").pop()}`;
         await Company.findByIdAndUpdate(company._id, { logoUrl });
         return logoUrl;
     }
+    /**
+     * Verify company (Admin only)
+     */
     async verifyCompany(companyId) {
         return Company.findByIdAndUpdate(companyId, {
             $set: {
@@ -88,6 +119,9 @@ class CompanyService {
             },
         }, { new: true });
     }
+    /**
+     * Suspend company
+     */
     async suspendCompany(companyId) {
         return Company.findByIdAndUpdate(companyId, {
             $set: {
@@ -96,10 +130,16 @@ class CompanyService {
             },
         }, { new: true });
     }
+    /**
+     * Check if user has a company
+     */
     async hasCompany(userId) {
         const company = await Company.findOne({ ownerId: userId });
         return !!company;
     }
+    /**
+     * Get all companies with pagination and filters
+     */
     async getAllCompanies(filters) {
         const query = {};
         if (filters.companyType)
@@ -120,6 +160,9 @@ class CompanyService {
         ]);
         return { companies, total };
     }
+    /**
+     * ✅ ADD THIS METHOD: Delete company (soft delete)
+     */
     async deleteCompany(userId, companyId) {
         const company = await Company.findOne({
             _id: companyId,
@@ -128,18 +171,26 @@ class CompanyService {
         if (!company) {
             throw new AppError("Company not found", 404);
         }
+        // Soft delete
+        // company.isDeleted = true;
+        // company.deletedAt = new Date();
         await company.save();
+        // Optionally, also soft delete all jobs associated with this company
         await Job.updateMany({ company: company._id }, {
             isDeleted: true,
             deletedAt: new Date(),
         });
         return company;
     }
+    /**
+     * Get company jobs with pagination (using companyId)
+     */
     async getCompanyJobs(userId, page, limit, status) {
         const company = await Company.findOne({ ownerId: userId });
         if (!company) {
             throw new AppError("Company not found", 404);
         }
+        // Query jobs using companyId
         const query = {
             company: company._id,
             isDeleted: false,
@@ -170,11 +221,15 @@ class CompanyService {
             },
         };
     }
+    /**
+     * ✅ ADD THIS METHOD: Get company statistics only
+     */
     async getCompanyStats(userId) {
         const company = await Company.findOne({ ownerId: userId });
         if (!company) {
             throw new AppError("Company not found", 404);
         }
+        // Use companyId instead of postedBy for company-level stats
         const jobs = await Job.find({
             company: company._id,
             isDeleted: false,
@@ -217,6 +272,8 @@ class CompanyService {
             company: {
                 id: company._id,
                 name: company.name,
+                // logo: company.logo,
+                // industry: company.industry,
                 website: company.website,
             },
             stats: {
@@ -229,6 +286,9 @@ class CompanyService {
             },
         };
     }
+    /**
+     * Get top skills from applications
+     */
     async getTopSkills(jobIds) {
         const applications = await Application.find({
             jobId: { $in: jobIds },
