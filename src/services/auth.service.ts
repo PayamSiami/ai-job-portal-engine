@@ -1,6 +1,6 @@
 // src/services/authService.ts
-import { config } from "../config/index.js";
-import User, { IUser, UserRole } from "../models/User.models.js";
+import { config } from "../config/index";
+import User, { IUser, UserRole } from "../models/User.models";
 import jwt from "jsonwebtoken";
 
 export interface RegisterData {

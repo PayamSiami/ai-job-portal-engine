@@ -7,4 +7,3 @@ export default function hashString(input) {
     }
     return hash.toString();
 }
-//# sourceMappingURL=hashString.js.map

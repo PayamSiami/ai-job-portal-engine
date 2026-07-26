@@ -1,9 +1,9 @@
 // services/resume.service.ts
 import { Types } from "mongoose";
-import Resume from "../models/Resume.models.js";
-import { AppError } from "../utils/errorHandler.js";
-import logger from "../utils/logger.js";
-import { CreateResumeDTO, UpdateResumeDTO } from "../types/resume.types.js";
+import Resume from "../models/Resume.models";
+import { AppError } from "../utils/errorHandler";
+import logger from "../utils/logger";
+import { CreateResumeDTO, UpdateResumeDTO } from "../types/resume.types";
 
 class ResumeService {
   /**

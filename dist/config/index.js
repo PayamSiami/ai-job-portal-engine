@@ -33,4 +33,3 @@ class Config {
     }
 }
 export const config = new Config();
-//# sourceMappingURL=index.js.map

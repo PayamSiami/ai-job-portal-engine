@@ -1,8 +1,6 @@
-// backend/src/services/activity.service.ts
-import Job from "../models/Job.models.js";
-import Application, { ApplicationStatus } from "../models/Application.model.js";
-import Company from "../models/Company.models.js";
-import jobService from "./job.service.js";
+import Job from "../models/Job.models";
+import Application, { ApplicationStatus } from "../models/Application.model";
+import jobService from "./job.service";
 
 export interface Activity {
   id: string;

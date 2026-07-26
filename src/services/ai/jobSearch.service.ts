@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
-import Job, { IJob } from "../../models/Job.models.js";
-import { config } from "../../config/index.js";
+import Job, { IJob } from "../../models/Job.models";
+import { config } from "../../config/index";
 
 export type ExperienceLevel = "entry" | "mid" | "senior" | "lead";
 export type WorkMode = "remote" | "hybrid" | "on-site";

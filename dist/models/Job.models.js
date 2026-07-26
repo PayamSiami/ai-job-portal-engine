@@ -121,4 +121,3 @@ jobSchema.index({ workMode: 1 });
 jobSchema.index({ createdAt: -1 });
 const Job = mongoose.model("Job", jobSchema);
 export default Job;
-//# sourceMappingURL=Job.models.js.map

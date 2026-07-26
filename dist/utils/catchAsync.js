@@ -10,4 +10,3 @@ export const catchAsync = (fn) => {
 };
 // For backward compatibility with CommonJS
 export default catchAsync;
-//# sourceMappingURL=catchAsync.js.map

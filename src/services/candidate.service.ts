@@ -1,11 +1,11 @@
 // backend/src/services/candidate.service.ts
 import mongoose, { Model, Types } from "mongoose";
-import Job from "../models/Job.models.js";
-import Application, { ApplicationStatus } from "../models/Application.model.js";
-import Resume from "../models/Resume.models.js";
-import User from "../models/User.models.js";
-import jobService from "./job.service.js";
-import logger from "../utils/logger.js";
+import Job from "../models/Job.models";
+import Application, { ApplicationStatus } from "../models/Application.model";
+import Resume from "../models/Resume.models";
+import User from "../models/User.models";
+import jobService from "./job.service";
+import logger from "../utils/logger";
 
 // Types
 interface FilterOptions {

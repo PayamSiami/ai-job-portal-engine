@@ -1,10 +1,10 @@
 // backend/src/services/company.service.ts
-import { Company, CompanyStatus } from "../models/Company.models.js";
-import Job from "../models/Job.models.js";
-import Application from "../models/Application.model.js";
-import User from "../models/User.models.js";
-import { AppError } from "../utils/errorHandler.js";
-import Resume from "../models/Resume.models.js";
+import { Company, CompanyStatus } from "../models/Company.models";
+import Job from "../models/Job.models";
+import Application from "../models/Application.model";
+import User from "../models/User.models";
+import { AppError } from "../utils/errorHandler";
+import Resume from "../models/Resume.models";
 class CompanyService {
     /**
      * Create a new company
@@ -315,4 +315,3 @@ class CompanyService {
     }
 }
 export default new CompanyService;
-//# sourceMappingURL=company.service.js.map

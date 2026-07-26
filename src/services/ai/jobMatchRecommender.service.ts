@@ -5,8 +5,8 @@ import {
   GenerationConfig,
 } from "@google/generative-ai";
 import NodeCache from "node-cache";
-import { config } from "../../config/index.js";
-import hashString from "../../utils/hashString.js";
+import { config } from "../../config/index";
+import hashString from "../../utils/hashString";
 
 // ============ Type Definitions ============
 

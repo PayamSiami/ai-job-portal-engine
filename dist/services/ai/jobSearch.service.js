@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { config } from "../../config/index.js";
+import { config } from "../../config/index";
 class JobService {
     genAI = null;
     model = null;
@@ -262,4 +262,3 @@ class JobService {
     }
 }
 export default new JobService();
-//# sourceMappingURL=jobSearch.service.js.map

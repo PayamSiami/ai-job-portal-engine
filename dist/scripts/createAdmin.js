@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import User, { UserRole } from '../models/User.models.js';
+import User, { UserRole } from '../models/User.models';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '../../.env') });
@@ -49,4 +49,3 @@ const createAdmin = async () => {
     }
 };
 createAdmin();
-//# sourceMappingURL=createAdmin.js.map

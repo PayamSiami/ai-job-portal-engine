@@ -1,6 +1,6 @@
-import { catchAsync } from "../utils/catchAsync.js";
-import { AppError } from "../utils/errorHandler.js";
-import companyService from "../services/company.service.js";
+import { catchAsync } from "../utils/catchAsync";
+import { AppError } from "../utils/errorHandler";
+import companyService from "../services/company.service";
 export class CompanyController {
     createCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -86,4 +86,3 @@ export class CompanyController {
         });
     });
 }
-//# sourceMappingURL=company.controller.js.map

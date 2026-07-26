@@ -1,8 +1,8 @@
 // src/services/jobMatchRecommender.service.ts
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
-import { config } from "../../config/index.js";
-import hashString from "../../utils/hashString.js";
+import { config } from "../../config/index";
+import hashString from "../../utils/hashString";
 // ============ Service Class ============
 class JobMatchRecommenderService {
     genAI;
@@ -483,4 +483,3 @@ class JobMatchRecommenderService {
     }
 }
 export default new JobMatchRecommenderService();
-//# sourceMappingURL=jobMatchRecommender.service.js.map

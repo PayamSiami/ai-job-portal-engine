@@ -1,6 +1,6 @@
 import { Router } from "express";
-import jobController from "../controllers/job.controller.js";
-import { protect, authorize } from "../middleware/authMiddleware.js";
+import jobController from "../controllers/job.controller";
+import { protect, authorize } from "../middleware/authMiddleware";
 const router = Router();
 // ============================================================
 // 🟢 PUBLIC ROUTES (No authentication required)
@@ -169,4 +169,3 @@ router.get("/search/ai", protect, jobController.searchJobsAI);
  */
 router.post("/generate-content", protect, authorize("employer"), jobController.generateJobContent);
 export default router;
-//# sourceMappingURL=job.routes.js.map

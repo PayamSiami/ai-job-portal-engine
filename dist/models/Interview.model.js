@@ -244,4 +244,3 @@ InterviewSchema.statics.findTodayInterviews = function () {
 // ==================== Model ====================
 export const Interview = mongoose.model("Interview", InterviewSchema);
 export default Interview;
-//# sourceMappingURL=Interview.model.js.map

@@ -1,7 +1,7 @@
 // utils/companyHelper.ts
 import { Types } from "mongoose";
-import Company from "../models/Company.models.js";
-import logger from "./logger.js";
+import Company from "../models/Company.models";
+import logger from "./logger";
 /**
  * Get company name from job object
  * Handles both populated and unpopulated cases
@@ -63,4 +63,3 @@ export const getCompanyNameById = async (companyId) => {
         return "Unknown Company";
     }
 };
-//# sourceMappingURL=companyHelper.js.map

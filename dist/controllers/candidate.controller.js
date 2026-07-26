@@ -1,8 +1,8 @@
-import { getUserId } from "../utils/routeHelpers.js";
-import { sendSuccess } from "../utils/responseFormatter.js";
-import { AppError } from "../utils/errorHandler.js";
-import { asyncHandler } from "./base.controller.js";
-import candidateService from "../services/candidate.service.js";
+import { getUserId } from "../utils/routeHelpers";
+import { sendSuccess } from "../utils/responseFormatter";
+import { AppError } from "../utils/errorHandler";
+import { asyncHandler } from "./base.controller";
+import candidateService from "../services/candidate.service";
 /**
  * Dashboard Controller
  * Handles all dashboard, analytics, candidate, and company management
@@ -272,4 +272,3 @@ class CandidateController {
     });
 }
 export default new CandidateController();
-//# sourceMappingURL=candidate.controller.js.map

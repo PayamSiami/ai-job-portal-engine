@@ -1,9 +1,9 @@
 // src/services/ai/careerFeedback.ts
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
-import { config } from "../../config/index.js";
-import hashString from "../../utils/hashString.js";
-import { generateWithGroq, testGroqConnection } from "./groq.service.js";
+import { config } from "../../config/index";
+import hashString from "../../utils/hashString";
+import { generateWithGroq, testGroqConnection } from "./groq.service";
 // ============ Service Class ============
 class CareerFeedbackService {
     genAI;
@@ -508,4 +508,3 @@ class CareerFeedbackService {
 }
 // Export singleton instance
 export default new CareerFeedbackService();
-//# sourceMappingURL=careerFeedback.js.map

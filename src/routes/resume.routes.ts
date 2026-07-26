@@ -1,8 +1,8 @@
 import { Router } from "express";
-import resumeController from "../controllers/resume.controller.js";
-import resumeAIController from "../controllers/resume.controller.js";
-import { protect, authorize } from "../middleware/authMiddleware.js";
-import { validate } from "../middleware/validation.middleware.js";
+import resumeController from "../controllers/resume.controller";
+import resumeAIController from "../controllers/resume.controller";
+import { protect, authorize } from "../middleware/authMiddleware";
+import { validate } from "../middleware/validation.middleware";
 import {
   createResumeValidation,
   updateResumeValidation,
@@ -18,7 +18,7 @@ import {
   jobMatchesValidation,
   improvementSuggestionsValidation,
   bulkDeleteValidation,
-} from "../validations/resume.validator.js";
+} from "../validations/resume.validator";
 
 const router = Router();
 

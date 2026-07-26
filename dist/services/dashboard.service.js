@@ -1,11 +1,11 @@
-import Job from "../models/Job.models.js";
-import Application, { ApplicationStatus } from "../models/Application.model.js";
-import Company from "../models/Company.models.js";
-import Resume from "../models/Resume.models.js";
-import User from "../models/User.models.js";
-import { AppError } from "../utils/errorHandler.js";
-import companyService from "./company.service.js";
-import jobService from "./job.service.js";
+import Job from "../models/Job.models";
+import Application, { ApplicationStatus } from "../models/Application.model";
+import Company from "../models/Company.models";
+import Resume from "../models/Resume.models";
+import User from "../models/User.models";
+import { AppError } from "../utils/errorHandler";
+import companyService from "./company.service";
+import jobService from "./job.service";
 // ==================== MERGED SERVICE ====================
 class DashboardService {
     Job;
@@ -243,4 +243,3 @@ class DashboardService {
     }
 }
 export default new DashboardService();
-//# sourceMappingURL=dashboard.service.js.map

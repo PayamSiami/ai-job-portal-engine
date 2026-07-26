@@ -1,7 +1,7 @@
 // src/services/userService.ts
-import User, { UserRole } from "../models/User.models.js";
+import User, { UserRole } from "../models/User.models";
 import mongoose from "mongoose";
-import logger from "../utils/logger.js";
+import logger from "../utils/logger";
 // ============ Service Class ============
 class UserService {
     /**
@@ -604,4 +604,3 @@ class UserService {
     }
 }
 export default new UserService();
-//# sourceMappingURL=user.service.js.map

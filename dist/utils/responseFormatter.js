@@ -12,4 +12,3 @@ export const sendError = (res, error, statusCode = 500) => {
         error: message,
     });
 };
-//# sourceMappingURL=responseFormatter.js.map

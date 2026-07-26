@@ -125,4 +125,3 @@ applicationSchema.index({ status: 1, appliedAt: -1 });
 applicationSchema.index({ interview: 1 });
 const Application = mongoose.model("Application", applicationSchema);
 export default Application;
-//# sourceMappingURL=Application.model.js.map

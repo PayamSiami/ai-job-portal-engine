@@ -1,10 +1,10 @@
 // src/routes/users.routes.ts
 import express from "express";
-import userService from "../services/user.service.js";
-import { protect, authorize } from "../middleware/authMiddleware.js";
-import { UserRole } from "../models/User.models.js";
-import { getNumberQueryParam, getStringParam, getUserId, } from "../utils/routeHelpers.js";
-import { getBooleanQueryParam, getStringQueryParam, } from "../utils/getQueryParam.js";
+import userService from "../services/user.service";
+import { protect, authorize } from "../middleware/authMiddleware";
+import { UserRole } from "../models/User.models";
+import { getNumberQueryParam, getStringParam, getUserId, } from "../utils/routeHelpers";
+import { getBooleanQueryParam, getStringQueryParam, } from "../utils/getQueryParam";
 const router = express.Router();
 // ============ Public Routes ============
 // Check if email is available
@@ -493,4 +493,3 @@ router.get("/active/all", protect, authorize(UserRole.ADMIN), async (req, res) =
     }
 });
 export default router;
-//# sourceMappingURL=user.routes.js.map

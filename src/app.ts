@@ -1,23 +1,22 @@
-// src/app.ts
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
-import authRoutes from "./routes/auth.routes.js";
-import jobRoutes from "./routes/job.routes.js";
-import applicationRoutes from "./routes/application.routes.js";
-import resumeRoutes from "./routes/resume.routes.js";
-import userRoutes from "./routes/user.routes.js";
-import { config } from "./config/index.js";
-import { swaggerSpec, swaggerUi } from "./config/swagger.js";
-import healthService from "./services/health.service.js";
-import logger from "./utils/logger.js";
-import dashboardRoutes from "./routes/dashboard.routes.js";
-import candidateRoutes from "./routes/candidates.routes.js";
-import activityRoutes from "./routes/activity.routes.js";
-import companyRoutes from "./routes/company.routes.js";
+import authRoutes from "./routes/auth.routes";
+import jobRoutes from "./routes/job.routes";
+import applicationRoutes from "./routes/application.routes";
+import resumeRoutes from "./routes/resume.routes";
+import userRoutes from "./routes/user.routes";
+import { config } from "./config";
+import { swaggerSpec, swaggerUi } from "./config/swagger";
+import healthService from "./services/health.service";
+import logger from "./utils/logger";
+import dashboardRoutes from "./routes/dashboard.routes";
+import candidateRoutes from "./routes/candidates.routes";
+import activityRoutes from "./routes/activity.routes";
+import companyRoutes from "./routes/company.routes";
 
 const app = express();
 
@@ -41,8 +40,8 @@ app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
 // Rate limiting
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: { error: "Too many requests from this IP, please try again later." },
 });
 
@@ -67,7 +66,7 @@ app.use(
 );
 
 // ============ Database Connection ============
-const MONGODB_URI = `mongodb://${config.DB_HOST || "localhost"}:${config.DB_PORT || "27017"}/${config.DB_NAME || "jobportal"}`;
+const MONGODB_URI = `mongodb://${config.DB_HOST || "mongodb"}:${config.DB_PORT || "27017"}/${config.DB_NAME || "jobportal"}`;
 
 mongoose
   .connect(MONGODB_URI)
@@ -118,7 +117,7 @@ app.get("/health/detailed", async (req, res) => {
   }
 });
 
-// Readiness probe (for Kubernetes)
+// Readiness probe
 app.get("/health/ready", async (req, res) => {
   try {
     const readiness = await healthService.checkReadiness();
@@ -139,7 +138,6 @@ app.use((req, res) => {
 });
 
 // ============ Global Error Handler ============
-// ✅ FIX: Ensure status is a number before using it
 app.use((err: any, req: any, res: any, next: any) => {
   console.error("❌ Error:", {
     message: err.message,
@@ -149,29 +147,19 @@ app.use((err: any, req: any, res: any, next: any) => {
     method: req.method,
   });
 
-  // ✅ Ensure statusCode is a number
   let statusCode = 500;
   let message = "Internal server error";
 
-  // Check if error has a valid status code
   if (err.statusCode && typeof err.statusCode === "number") {
     statusCode = err.statusCode;
     message = err.message || message;
   } else if (err.status && typeof err.status === "number") {
     statusCode = err.status;
     message = err.message || message;
-  } else if (
-    err.status &&
-    typeof err.status === "string" &&
-    !isNaN(parseInt(err.status))
-  ) {
-    statusCode = parseInt(err.status);
-    message = err.message || message;
   } else if (err.message) {
     message = err.message;
   }
 
-  // ✅ Send response with numeric status code
   res.status(statusCode).json({
     success: false,
     message,
@@ -182,12 +170,11 @@ app.use((err: any, req: any, res: any, next: any) => {
   });
 });
 
-const PORT = config.PORT || 3000;
+const PORT = config.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`\n🚀 Server running on http://localhost:${PORT}`);
   console.log(`📚 API Documentation: http://localhost:${PORT}/api/docs`);
-  console.log(`📄 PDF Routes: http://localhost:${PORT}/api/pdf`);
 });
 
 export default app;

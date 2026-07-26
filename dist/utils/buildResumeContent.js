@@ -188,4 +188,3 @@ function formatDate(date) {
         return '';
     }
 }
-//# sourceMappingURL=buildResumeContent.js.map

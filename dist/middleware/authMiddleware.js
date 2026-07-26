@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
-import { AppError } from "../utils/errorHandler.js";
-import User from "../models/User.models.js";
+import { AppError } from "../utils/errorHandler";
+import User from "../models/User.models";
 /**
  * Protect route - verify JWT token
  */
@@ -48,4 +48,3 @@ export const authorize = (...roles) => {
         next();
     };
 };
-//# sourceMappingURL=authMiddleware.js.map

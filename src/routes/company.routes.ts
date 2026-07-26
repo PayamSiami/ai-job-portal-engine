@@ -1,8 +1,8 @@
 import express from "express";
 import multer from "multer";
 
-import { CompanyController } from "../controllers/company.controller.js";
-import { authorize, protect } from "../middleware/authMiddleware.js";
+import { CompanyController } from "../controllers/company.controller";
+import { authorize, protect } from "../middleware/authMiddleware";
 
 const router = express.Router();
 const companyController = new CompanyController();

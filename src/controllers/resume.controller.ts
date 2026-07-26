@@ -1,24 +1,24 @@
 import { Request, Response, NextFunction } from "express";
 import fs from "fs";
-import resumeService from "../services/resume.service.js";
-import resumeAnalyzerService from "../services/ai/resumeAnalyzer.service.js";
-import coverLetterGeneratorService from "../services/ai/coverLetterGenerator.js";
-import jobMatchRecommenderService from "../services/ai/jobMatchRecommender.service.js";
-import careerFeedbackService from "../services/ai/careerFeedback.js";
-import pdfService from "../services/pdf.service.js";
-import { getUserId, getStringParam } from "../utils/routeHelpers.js";
-import { sendSuccess } from "../utils/responseFormatter.js";
-import { AppError } from "../utils/errorHandler.js";
-import logger from "../utils/logger.js";
+import resumeService from "../services/resume.service";
+import resumeAnalyzerService from "../services/ai/resumeAnalyzer.service";
+import coverLetterGeneratorService from "../services/ai/coverLetterGenerator";
+import jobMatchRecommenderService from "../services/ai/jobMatchRecommender.service";
+import careerFeedbackService from "../services/ai/careerFeedback";
+import pdfService from "../services/pdf.service";
+import { getUserId, getStringParam } from "../utils/routeHelpers";
+import { sendSuccess } from "../utils/responseFormatter";
+import { AppError } from "../utils/errorHandler";
+import logger from "../utils/logger";
 import {
   CreateResumeDTO,
   UpdateResumeDTO,
   ResumeQueryParams,
-} from "../types/resume.types.js";
-import { asyncHandler } from "./base.controller.js";
-import jobService from "../services/job.service.js";
-import { buildResumeContent } from "../utils/buildResumeContent.js";
-import { getCompanyNameFromJob } from "../utils/companyHelper.js";
+} from "../types/resume.types";
+import { asyncHandler } from "./base.controller";
+import jobService from "../services/job.service";
+import { buildResumeContent } from "../utils/buildResumeContent";
+import { getCompanyNameFromJob } from "../utils/companyHelper";
 
 /**
  * Resume Controller

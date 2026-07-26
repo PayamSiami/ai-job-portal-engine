@@ -1,5 +1,5 @@
 import { body, validationResult } from "express-validator";
-import { AppError } from "../utils/errorHandler.js";
+import { AppError } from "../utils/errorHandler";
 // Validation for registration
 export const validateRegistration = [
     body("username")
@@ -62,4 +62,3 @@ export const validateRequired = (fields) => {
         next();
     };
 };
-//# sourceMappingURL=validation.middleware.js.map

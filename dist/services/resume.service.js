@@ -1,8 +1,8 @@
 // services/resume.service.ts
 import { Types } from "mongoose";
-import Resume from "../models/Resume.models.js";
-import { AppError } from "../utils/errorHandler.js";
-import logger from "../utils/logger.js";
+import Resume from "../models/Resume.models";
+import { AppError } from "../utils/errorHandler";
+import logger from "../utils/logger";
 class ResumeService {
     /**
      * Get all resumes for a user with pagination and filtering
@@ -509,4 +509,3 @@ class ResumeService {
     }
 }
 export default new ResumeService();
-//# sourceMappingURL=resume.service.js.map

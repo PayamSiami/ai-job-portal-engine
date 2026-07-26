@@ -24,4 +24,3 @@ export const getBooleanQueryParam = (value) => {
         return undefined;
     return str === "true" || str === "1";
 };
-//# sourceMappingURL=getQueryParam.js.map

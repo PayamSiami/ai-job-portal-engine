@@ -1,11 +1,11 @@
 // backend/src/services/company.service.ts
-import { Company, ICompany, CompanyStatus } from "../models/Company.models.js";
-import Job, { IJob } from "../models/Job.models.js";
-import Application from "../models/Application.model.js";
-import User from "../models/User.models.js";
-import { AppError } from "../utils/errorHandler.js";
+import { Company, ICompany, CompanyStatus } from "../models/Company.models";
+import Job, { IJob } from "../models/Job.models";
+import Application from "../models/Application.model";
+import User from "../models/User.models";
+import { AppError } from "../utils/errorHandler";
 import { ObjectId } from "mongoose";
-import Resume from "../models/Resume.models.js";
+import Resume from "../models/Resume.models";
 
 export interface CreateCompanyDto {
   name: string;

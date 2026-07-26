@@ -1,14 +1,14 @@
 // services/dashboard.service.ts
 import { Types } from "mongoose";
-import Job from "../models/Job.models.js";
-import Application, { ApplicationStatus } from "../models/Application.model.js";
-import Company from "../models/Company.models.js";
-import Resume from "../models/Resume.models.js";
-import User from "../models/User.models.js";
-import { AppError } from "../utils/errorHandler.js";
-import logger from "../utils/logger.js";
-import companyService from "./company.service.js";
-import jobService from "./job.service.js";
+import Job from "../models/Job.models";
+import Application, { ApplicationStatus } from "../models/Application.model";
+import Company from "../models/Company.models";
+import Resume from "../models/Resume.models";
+import User from "../models/User.models";
+import { AppError } from "../utils/errorHandler";
+import logger from "../utils/logger";
+import companyService from "./company.service";
+import jobService from "./job.service";
 
 // ==================== INTERFACES ====================
 

@@ -1,7 +1,7 @@
 // src/middleware/validationMiddleware.ts
 import { Request, Response, NextFunction } from "express";
 import { body, ValidationChain, validationResult } from "express-validator";
-import { AppError } from "../utils/errorHandler.js";
+import { AppError } from "../utils/errorHandler";
 
 // Validation for registration
 export const validateRegistration = [

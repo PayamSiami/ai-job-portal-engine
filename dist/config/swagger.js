@@ -1,6 +1,6 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
-import { config } from "./index.js";
+import { config } from "./index";
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -909,4 +909,3 @@ const swaggerOptions = {
 };
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 export { swaggerSpec, swaggerUi };
-//# sourceMappingURL=swagger.js.map

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import applicationController from "../controllers/application.controller.js";
-import { protect, authorize } from "../middleware/authMiddleware.js";
+import applicationController from "../controllers/application.controller";
+import { protect, authorize } from "../middleware/authMiddleware";
 const router = Router();
 // ============================================================
 // APPLICATION ROUTES
@@ -96,4 +96,3 @@ router.patch("/:id/withdraw", protect, authorize("job-seeker"), applicationContr
  */
 router.delete("/:id", protect, authorize("admin"), applicationController.deleteApplication);
 export default router;
-//# sourceMappingURL=application.routes.js.map

@@ -251,4 +251,3 @@ CompanySchema.virtual("activeJobs", {
 // ==================== Model ====================
 export const Company = mongoose.model("Company", CompanySchema);
 export default Company;
-//# sourceMappingURL=Company.models.js.map

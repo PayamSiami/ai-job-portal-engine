@@ -1,6 +1,6 @@
 import express from "express";
-import { authorize, protect } from "../middleware/authMiddleware.js";
-import candidateController from "../controllers/candidate.controller.js";
+import { authorize, protect } from "../middleware/authMiddleware";
+import candidateController from "../controllers/candidate.controller";
 const router = express.Router();
 // All routes require authentication
 router.use(protect);
@@ -16,4 +16,3 @@ router.get("/:id/resume", candidateController.getCandidateResume);
 router.put("/bulk/status", candidateController.bulkUpdateCandidateStatus);
 router.delete("/bulk", candidateController.bulkDeleteCandidates);
 export default router;
-//# sourceMappingURL=candidates.routes.js.map

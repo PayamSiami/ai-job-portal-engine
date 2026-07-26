@@ -139,4 +139,3 @@ resumeSchema.index({ user: 1, status: 1 });
 resumeSchema.index({ user: 1, createdAt: -1 });
 const Resume = mongoose.model("Resume", resumeSchema);
 export default Resume;
-//# sourceMappingURL=Resume.models.js.map

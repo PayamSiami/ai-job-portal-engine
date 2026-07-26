@@ -1,17 +1,17 @@
 // src/routes/users.routes.ts
 import express, { Request, Response, Router } from "express";
-import userService from "../services/user.service.js";
-import { protect, authorize } from "../middleware/authMiddleware.js";
-import { UserRole } from "../models/User.models.js";
+import userService from "../services/user.service";
+import { protect, authorize } from "../middleware/authMiddleware";
+import { UserRole } from "../models/User.models";
 import {
   getNumberQueryParam,
   getStringParam,
   getUserId,
-} from "../utils/routeHelpers.js";
+} from "../utils/routeHelpers";
 import {
   getBooleanQueryParam,
   getStringQueryParam,
-} from "../utils/getQueryParam.js";
+} from "../utils/getQueryParam";
 
 const router: Router = express.Router();
 

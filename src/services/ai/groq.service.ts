@@ -1,6 +1,6 @@
 // backend/src/services/ai/groq.service.ts
 import Groq from "groq-sdk";
-import { config } from "../../config/index.js";
+import { config } from "../../config/index";
 
 const groq = new Groq({
   apiKey: config.GROQ_API_KEY,

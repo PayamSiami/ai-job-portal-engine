@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { AppError } from "../utils/errorHandler.js";
-import { getUserId } from "../utils/routeHelpers.js";
-import User from "../models/User.models.js";
+import { AppError } from "../utils/errorHandler";
+import { getUserId } from "../utils/routeHelpers";
+import User from "../models/User.models";
 
 // Extend Express Request type
 declare global {

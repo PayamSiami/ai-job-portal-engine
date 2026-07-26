@@ -1,6 +1,6 @@
 // src/services/authService.ts
-import { config } from "../config/index.js";
-import User, { UserRole } from "../models/User.models.js";
+import { config } from "../config/index";
+import User, { UserRole } from "../models/User.models";
 import jwt from "jsonwebtoken";
 class AuthService {
     /**
@@ -179,4 +179,3 @@ class AuthService {
     }
 }
 export default new AuthService();
-//# sourceMappingURL=auth.service.js.map

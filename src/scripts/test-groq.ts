@@ -2,7 +2,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { testGroqConnection, generateWithGroq } from '../services/ai/groq.service.js';
+import { testGroqConnection, generateWithGroq } from '../services/ai/groq.service';
 
 async function testGroq() {
   console.log('🔍 Testing Groq Service...');

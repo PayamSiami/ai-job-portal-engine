@@ -4,9 +4,8 @@ import {
   GenerationConfig,
 } from "@google/generative-ai";
 import NodeCache from "node-cache";
-import { config } from "../../config/index.js";
-import hashString from "../../utils/hashString.js";
-import { ObjectId } from "mongoose";
+import { config } from "../../config/index";
+import hashString from "../../utils/hashString";
 
 export interface ApplicationData {
   expectedSalary?: number;

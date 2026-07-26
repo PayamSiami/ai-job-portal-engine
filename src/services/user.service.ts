@@ -1,8 +1,8 @@
 // src/services/userService.ts
-import User, { IUser, UserRole } from "../models/User.models.js";
+import User, { IUser, UserRole } from "../models/User.models";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import logger from "../utils/logger.js";
+import logger from "../utils/logger";
 
 // ============ Type Definitions ============
 

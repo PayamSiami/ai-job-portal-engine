@@ -1,12 +1,9 @@
 import { Request, Response } from "express";
-import { getUserId } from "../utils/routeHelpers.js";
-import { sendSuccess } from "../utils/responseFormatter.js";
-import { AppError } from "../utils/errorHandler.js";
-import { asyncHandler } from "./base.controller.js";
-import candidateService from "../services/candidate.service.js";
-import { Company } from "../models/Company.models.js";
-import Job from "../models/Job.models.js";
-import Application from "../models/Application.model.js";
+import { getUserId } from "../utils/routeHelpers";
+import { sendSuccess } from "../utils/responseFormatter";
+import { AppError } from "../utils/errorHandler";
+import { asyncHandler } from "./base.controller";
+import candidateService from "../services/candidate.service";
 
 /**
  * Dashboard Controller

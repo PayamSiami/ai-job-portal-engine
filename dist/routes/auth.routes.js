@@ -1,9 +1,9 @@
 // src/routes/auth.routes.ts
 import express from "express";
-import { validateRegistration, validateLogin, } from "../middleware/validation.middleware.js";
-import authService from "../services/auth.service.js";
-import { protect } from "../middleware/authMiddleware.js";
-import { getUserId } from "../utils/routeHelpers.js";
+import { validateRegistration, validateLogin, } from "../middleware/validation.middleware";
+import authService from "../services/auth.service";
+import { protect } from "../middleware/authMiddleware";
+import { getUserId } from "../utils/routeHelpers";
 const router = express.Router();
 /**
  * @swagger
@@ -176,4 +176,3 @@ router.get("/me", protect, async (req, res) => {
     }
 });
 export default router;
-//# sourceMappingURL=auth.routes.js.map

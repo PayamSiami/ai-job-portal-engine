@@ -73,4 +73,3 @@ export const createCompanySchema = z.object({
 export const updateCompanySchema = z.object({
     body: createCompanySchema.shape.body.partial(),
 });
-//# sourceMappingURL=company.validation.js.map

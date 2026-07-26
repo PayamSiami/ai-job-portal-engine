@@ -1,7 +1,7 @@
 // routes/dashboard.routes.ts
 import { Router } from "express";
-import dashboardController from "../controllers/dashboardController.js";
-import { protect } from "../middleware/authMiddleware.js";
+import dashboardController from "../controllers/dashboardController";
+import { protect } from "../middleware/authMiddleware";
 
 const router = Router();
 

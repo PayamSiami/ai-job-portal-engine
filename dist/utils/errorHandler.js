@@ -54,4 +54,3 @@ export const errorHandler = (err, req, res, next) => {
     }
 };
 export default { AppError, errorHandler };
-//# sourceMappingURL=errorHandler.js.map

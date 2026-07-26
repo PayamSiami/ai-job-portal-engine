@@ -1,7 +1,7 @@
 // routes/dashboard.routes.ts
 import { Router } from "express";
-import { protect } from "../middleware/authMiddleware.js";
-import activityController from "../controllers/activity.controller.js";
+import { protect } from "../middleware/authMiddleware";
+import activityController from "../controllers/activity.controller";
 
 const router = Router();
 

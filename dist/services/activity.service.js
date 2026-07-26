@@ -1,5 +1,5 @@
-import Application, { ApplicationStatus } from "../models/Application.model.js";
-import jobService from "./job.service.js";
+import Application, { ApplicationStatus } from "../models/Application.model";
+import jobService from "./job.service";
 class ActivityService {
     // services/activity.service.ts
     /**
@@ -457,4 +457,3 @@ class ActivityService {
     }
 }
 export default new ActivityService();
-//# sourceMappingURL=activity.service.js.map

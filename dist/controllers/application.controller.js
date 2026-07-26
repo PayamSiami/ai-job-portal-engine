@@ -1,14 +1,14 @@
-import applicationService from "../services/application.service.js";
-import applicationScreeningService from "../services/ai/applicationScreening.js";
-import jobService from "../services/job.service.js";
-import resumeService from "../services/resume.service.js";
-import { getUserId, getStringParam } from "../utils/routeHelpers.js";
-import { sendSuccess } from "../utils/responseFormatter.js";
-import { AppError } from "../utils/errorHandler.js";
-import { ApplicationStatus } from "../models/Application.model.js";
-import { buildResumeContent } from "../utils/buildResumeContent.js";
-import logger from "../utils/logger.js";
-import { asyncHandler } from "./base.controller.js";
+import applicationService from "../services/application.service";
+import applicationScreeningService from "../services/ai/applicationScreening";
+import jobService from "../services/job.service";
+import resumeService from "../services/resume.service";
+import { getUserId, getStringParam } from "../utils/routeHelpers";
+import { sendSuccess } from "../utils/responseFormatter";
+import { AppError } from "../utils/errorHandler";
+import { ApplicationStatus } from "../models/Application.model";
+import { buildResumeContent } from "../utils/buildResumeContent";
+import logger from "../utils/logger";
+import { asyncHandler } from "./base.controller";
 import mongoose from "mongoose";
 /**
  * Application Controller
@@ -291,4 +291,3 @@ class ApplicationController {
     });
 }
 export default new ApplicationController();
-//# sourceMappingURL=application.controller.js.map

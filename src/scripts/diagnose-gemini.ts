@@ -1,7 +1,7 @@
 // backend/src/scripts/diagnose-gemini.ts
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { config } from "../config/index.js";
+import { config } from "../config/index";
 
 async function diagnose() {
   console.log("🔍 Starting Gemini API Diagnosis...");

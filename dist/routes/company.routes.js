@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
-import { CompanyController } from "../controllers/company.controller.js";
-import { authorize, protect } from "../middleware/authMiddleware.js";
+import { CompanyController } from "../controllers/company.controller";
+import { authorize, protect } from "../middleware/authMiddleware";
 const router = express.Router();
 const companyController = new CompanyController();
 // Multer configuration
@@ -36,4 +36,3 @@ router.put("/", authorize("employer"), companyController.updateCompany);
 router.post("/upload-logo", upload.single("logo"), companyController.uploadLogo);
 router.delete("/company", protect, companyController.deleteCompany);
 export default router;
-//# sourceMappingURL=company.routes.js.map

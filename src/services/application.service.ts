@@ -2,19 +2,19 @@
 import Application, {
   IApplication,
   ApplicationStatus,
-} from "../models/Application.model.js";
-import Job from "../models/Job.models.js";
-import Resume from "../models/Resume.models.js";
+} from "../models/Application.model";
+import Job from "../models/Job.models";
+import Resume from "../models/Resume.models";
 import {
   Interview,
   InterviewStatus,
   InterviewType,
-} from "../models/Interview.model.js";
+} from "../models/Interview.model";
 import mongoose, { Types } from "mongoose";
-import logger from "../utils/logger.js";
-import { AppError } from "../utils/errorHandler.js";
-import Company from "../models/Company.models.js";
-import jobService from "./job.service.js";
+import logger from "../utils/logger";
+import { AppError } from "../utils/errorHandler";
+import Company from "../models/Company.models";
+import jobService from "./job.service";
 
 // ============ Type Definitions ============
 

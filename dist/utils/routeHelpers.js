@@ -39,4 +39,3 @@ export const getNumberQueryParam = (value, defaultValue = 0) => {
     const num = parseInt(str, 10);
     return isNaN(num) ? defaultValue : num;
 };
-//# sourceMappingURL=routeHelpers.js.map

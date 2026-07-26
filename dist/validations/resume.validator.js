@@ -267,4 +267,3 @@ export const resumeValidations = {
     improvements: improvementSuggestionsValidation,
     bulkDelete: bulkDeleteValidation,
 };
-//# sourceMappingURL=resume.validator.js.map

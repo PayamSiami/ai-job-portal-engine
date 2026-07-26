@@ -1,10 +1,10 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import Job from "../models/Job.models.js";
-import { config } from "../config/index.js";
-import Company from "../models/Company.models.js";
-import { AppError } from "../utils/errorHandler.js";
-import Application, { ApplicationStatus } from "../models/Application.model.js";
-import logger from "../utils/logger.js";
+import Job from "../models/Job.models";
+import { config } from "../config/index";
+import Company from "../models/Company.models";
+import { AppError } from "../utils/errorHandler";
+import Application, { ApplicationStatus } from "../models/Application.model";
+import logger from "../utils/logger";
 import mongoose, { Types } from "mongoose";
 class JobService {
     genAI;
@@ -1325,4 +1325,3 @@ class JobService {
     }
 }
 export default new JobService();
-//# sourceMappingURL=job.service.js.map

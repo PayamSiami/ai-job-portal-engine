@@ -1,9 +1,8 @@
-// import dashboardService from "../services/dashboard.service.js";
-import { getUserId } from "../utils/routeHelpers.js";
-import { sendSuccess } from "../utils/responseFormatter.js";
-import { AppError } from "../utils/errorHandler.js";
-import { asyncHandler } from "./base.controller.js";
-import activityService from "../services/activity.service.js";
+import { getUserId } from "../utils/routeHelpers";
+import { sendSuccess } from "../utils/responseFormatter";
+import { AppError } from "../utils/errorHandler";
+import { asyncHandler } from "./base.controller";
+import activityService from "../services/activity.service";
 /**
  * Dashboard Controller
  * Handles all dashboard, analytics, candidate, and company management
@@ -50,4 +49,3 @@ class ActivityController {
     });
 }
 export default new ActivityController();
-//# sourceMappingURL=activity.controller.js.map

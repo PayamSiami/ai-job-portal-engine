@@ -1,9 +1,9 @@
 import { Router } from "express";
-import resumeController from "../controllers/resume.controller.js";
-import resumeAIController from "../controllers/resume.controller.js";
-import { protect, authorize } from "../middleware/authMiddleware.js";
-import { validate } from "../middleware/validation.middleware.js";
-import { createResumeValidation, updateResumeValidation, getResumeValidation, deleteResumeValidation, duplicateResumeValidation, setDefaultResumeValidation, downloadPDFValidation, exportResumeValidation, analyzeResumeValidation, generateCoverLetterValidation, careerFeedbackValidation, jobMatchesValidation, improvementSuggestionsValidation, bulkDeleteValidation, } from "../validations/resume.validator.js";
+import resumeController from "../controllers/resume.controller";
+import resumeAIController from "../controllers/resume.controller";
+import { protect, authorize } from "../middleware/authMiddleware";
+import { validate } from "../middleware/validation.middleware";
+import { createResumeValidation, updateResumeValidation, getResumeValidation, deleteResumeValidation, duplicateResumeValidation, setDefaultResumeValidation, downloadPDFValidation, exportResumeValidation, analyzeResumeValidation, generateCoverLetterValidation, careerFeedbackValidation, jobMatchesValidation, improvementSuggestionsValidation, bulkDeleteValidation, } from "../validations/resume.validator";
 const router = Router();
 // ============================================================
 // RESUME CRUD OPERATIONS
@@ -200,4 +200,3 @@ router.get("/:id/job-matches", protect, validate(jobMatchesValidation), resumeAI
  */
 router.get("/:id/improvements", protect, validate(improvementSuggestionsValidation), resumeAIController.getImprovementSuggestions);
 export default router;
-//# sourceMappingURL=resume.routes.js.map

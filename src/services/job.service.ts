@@ -1,12 +1,12 @@
 import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
-import Job, { IJob } from "../models/Job.models.js";
-import { config } from "../config/index.js";
-import Company from "../models/Company.models.js";
-import { AppError } from "../utils/errorHandler.js";
-import Application, { ApplicationStatus } from "../models/Application.model.js";
-import logger from "../utils/logger.js";
+import Job, { IJob } from "../models/Job.models";
+import { config } from "../config/index";
+import Company from "../models/Company.models";
+import { AppError } from "../utils/errorHandler";
+import Application, { ApplicationStatus } from "../models/Application.model";
+import logger from "../utils/logger";
 import mongoose, { Types } from "mongoose";
-import { JobPerformance } from "./dashboard.service.js";
+import { JobPerformance } from "./dashboard.service";
 
 // Define strict types that match the model
 export type ExperienceLevel = "entry" | "mid" | "senior" | "lead";

@@ -1,8 +1,8 @@
 // src/services/healthService.ts
 import mongoose from "mongoose";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { config } from "../config/index.js";
-import logger from "../utils/logger.js";
+import { config } from "../config/index";
+import logger from "../utils/logger";
 import os from "os";
 class HealthService {
     genAI = null;
@@ -290,4 +290,3 @@ class HealthService {
     }
 }
 export default new HealthService();
-//# sourceMappingURL=health.service.js.map

@@ -1,9 +1,9 @@
-import jobService from "../services/job.service.js";
-import jobSearchService from "../services/ai/jobSearch.service.js";
-import { sendSuccess } from "../utils/responseFormatter.js";
-import { AppError } from "../utils/errorHandler.js";
-import { getUserId } from "../utils/routeHelpers.js";
-import { asyncHandler } from "./base.controller.js";
+import jobService from "../services/job.service";
+import jobSearchService from "../services/ai/jobSearch.service";
+import { sendSuccess } from "../utils/responseFormatter";
+import { AppError } from "../utils/errorHandler";
+import { getUserId } from "../utils/routeHelpers";
+import { asyncHandler } from "./base.controller";
 /**
  * Job Controller
  * Handles all job-related operations
@@ -281,4 +281,3 @@ class JobController {
     });
 }
 export default new JobController();
-//# sourceMappingURL=job.controller.js.map
