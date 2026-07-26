@@ -9,7 +9,6 @@ RUN npm install --omit=dev && npm cache clean --force
 
 # Copy the pre-built dist folder and src (for reference)
 COPY dist ./dist
-COPY src ./src 2>/dev/null || echo "No src folder"
 
 EXPOSE 5000
 
