@@ -166,7 +166,7 @@ router.post(
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Login failed";
-      res.status(401).json({ error: errorMessage });
+      res.status(400).json({ error: errorMessage });
     }
   },
 );

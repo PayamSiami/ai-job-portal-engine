@@ -317,7 +317,6 @@ class JobController {
       sendSuccess(
         res,
         {
-          query,
           parsedFilters,
           results: jobs,
         },

@@ -6,9 +6,6 @@ class Config {
   public GEMINI_API_KEY: string | undefined;
   public JWT_SECRET: string | undefined;
   public JWT_EXPIRE: string | undefined;
-  public DB_HOST: string | undefined;
-  public DB_PORT: string | undefined;
-  public DB_NAME: string | undefined;
   public PORT: string | undefined;
   public NODE_ENV: string | undefined;
   public GEMINI_MODEL: string;
@@ -22,10 +19,7 @@ class Config {
   constructor() {
     this.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
     this.JWT_SECRET = process.env.JWT_SECRET || "";
-    this.JWT_EXPIRE = process.env.JWT_EXPIRE || "";
-    this.DB_HOST = process.env.DB_HOST || "";
-    this.DB_PORT = process.env.DB_PORT || "";
-    this.DB_NAME = process.env.DB_NAME || "";
+    this.JWT_EXPIRE = process.env.JWT_EXPIRE || ""
     this.PORT = process.env.PORT || "";
     this.NODE_ENV = process.env.NODE_ENV || "";
     this.GEMINI_MODEL = process.env.GEMINI_MODEL || "";
