@@ -20,32 +20,46 @@ import companyRoutes from "./routes/company.routes";
 
 const app = express();
 
+// ============ Parse CORS Origins ============
+const parseCorsOrigins = (originString: string): string[] => {
+  if (config.NODE_ENV === "production") {
+    return originString.split(",").map((origin) => origin.trim());
+  }
+  // In development, allow all origins or specific ones
+  return originString === "*"
+    ? ["*"]
+    : originString.split(",").map((origin) => origin.trim());
+};
+
+const corsOrigins = parseCorsOrigins(config.CORS_ORIGIN);
+
 // ============ Middleware ============
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "https://panel.gigger.ir",
-    ],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    origin: corsOrigins,
+    credentials: config.CORS_CREDENTIALS,
+    methods: config.CORS_METHODS.split(",").map((method) => method.trim()),
+    allowedHeaders: config.CORS_ALLOWED_HEADERS.split(",").map((header) =>
+      header.trim(),
+    ),
   }),
 );
+
+// Dynamic CORS configuration based on environment
 app.use(
   helmet({
     contentSecurityPolicy: config.NODE_ENV === "production" ? undefined : false,
   }),
 );
+
 app.use(morgan("dev"));
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
 // Rate limiting
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: config.RATE_LIMIT_WINDOW_MS,
+  max: config.RATE_LIMIT_MAX,
   message: { error: "Too many requests from this IP, please try again later." },
 });
 

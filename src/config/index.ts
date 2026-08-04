@@ -15,6 +15,12 @@ class Config {
   public GROQ_MODEL: string;
   public GROQ_API_KEY: string;
   public MONGODB_URI: string;
+  public CORS_ORIGIN: string;
+  public CORS_CREDENTIALS: boolean;
+  public CORS_METHODS: string;
+  public CORS_ALLOWED_HEADERS: string;
+  public RATE_LIMIT_WINDOW_MS: number;
+  public RATE_LIMIT_MAX: number;
 
   constructor() {
     this.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
@@ -31,6 +37,12 @@ class Config {
     this.GROQ_API_KEY = process.env.GROQ_API_KEY || "";
     this.GROQ_MODEL = process.env.GROQ_MODEL || "";
     this.MONGODB_URI = process.env.MONGODB_URI || "";
+    this.CORS_ORIGIN = process.env.CORS_ORIGIN || "";
+    this.CORS_CREDENTIALS = process.env.CORS_CREDENTIALS === "true";
+    this.CORS_METHODS = process.env.CORS_METHODS || "";
+    this.CORS_ALLOWED_HEADERS = process.env.CORS_ALLOWED_HEADERS || "";
+    this.RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000", 10);
+    this.RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || "50", 10);
   }
 }
 
