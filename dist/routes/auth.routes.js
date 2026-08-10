@@ -4,6 +4,7 @@ import { validateRegistration, validateLogin, } from "../middleware/validation.m
 import authService from "../services/auth.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { getUserId } from "../utils/routeHelpers.js";
+import googleAuthController from "../controllers/googleAuth.controller.js";
 const router = express.Router();
 /**
  * @swagger
@@ -150,7 +151,7 @@ router.post("/login", validateLogin, async (req, res) => {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Login failed";
-        res.status(401).json({ error: errorMessage });
+        res.status(400).json({ error: errorMessage });
     }
 });
 router.get("/me", protect, async (req, res) => {
@@ -175,4 +176,76 @@ router.get("/me", protect, async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
+/**
+ * @swagger
+ * /api/auth/google:
+ *   post:
+ *     summary: Google OAuth login/signup
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - idToken
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *                 description: Google ID token from frontend
+ *               role:
+ *                 type: string
+ *                 enum: [job-seeker, employer]
+ *                 default: job-seeker
+ *     responses:
+ *       200:
+ *         description: Authentication successful
+ *       400:
+ *         description: Invalid token or missing idToken
+ *       500:
+ *         description: Server error
+ */
+router.post("/google", googleAuthController.googleAuth);
+/**
+ * @swagger
+ * /api/auth/google/link:
+ *   post:
+ *     summary: Link Google account to existing user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - idToken
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Google account linked
+ *       401:
+ *         description: Not authenticated
+ */
+router.post("/google/link", protect, googleAuthController.linkGoogleAccount);
+/**
+ * @swagger
+ * /api/auth/google/unlink:
+ *   post:
+ *     summary: Unlink Google account from user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Google account unlinked
+ *       401:
+ *         description: Not authenticated
+ */
+router.post("/google/unlink", protect, googleAuthController.unlinkGoogleAccount);
 export default router;

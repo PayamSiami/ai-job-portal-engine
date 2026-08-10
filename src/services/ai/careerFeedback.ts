@@ -6,6 +6,7 @@ import {
 } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index";
+import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
 import { generateWithGroq, testGroqConnection } from "./groq.service";
 
@@ -173,19 +174,17 @@ class CareerFeedbackService {
 
     let lastError: Error | null = null;
 
-    // ✅ Test Groq connection first
+    // Test Groq connection first
     const isConnected = await testGroqConnection();
     if (!isConnected) {
-      console.warn("⚠️ Groq connection failed, using fallback");
+      logger.warn("Groq connection failed, using fallback");
       return this.getFallbackResult("Groq connection failed");
     }
 
     // ✅ Try Groq with retries
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       try {
-        console.log(
-          `🤖 Attempt ${attempt + 1}: Generating feedback with Groq...`,
-        );
+        logger.info(`Attempt ${attempt + 1}: Generating feedback with Groq`);
 
         const prompt = this.buildFeedbackPrompt(
           truncatedResume,
@@ -215,25 +214,26 @@ class CareerFeedbackService {
             this.cache.set(cacheKey, finalResult);
           }
 
-          console.log(`✅ Successfully generated feedback with Groq`);
+          logger.info("Successfully generated feedback with Groq");
           return finalResult;
         } else {
           throw new Error(result.error || "Groq returned empty response");
         }
-      } catch (error: any) {
-        lastError = error as Error;
-        console.error(`Groq attempt ${attempt + 1} failed:`, error.message);
+      } catch (error: unknown) {
+        lastError = error instanceof Error ? error : new Error("Unknown error");
+        const message = lastError.message;
+        logger.error(`Groq attempt ${attempt + 1} failed`, { error: message });
 
         if (attempt < retryCount) {
           const delayMs = Math.pow(2, attempt) * 1000;
-          console.log(`⏳ Retrying in ${delayMs}ms...`);
+          logger.info(`Retrying in ${delayMs}ms`);
           await this.delay(delayMs);
         }
       }
     }
 
     // ✅ If all attempts fail, use fallback
-    console.error("All Groq attempts failed, using fallback:", lastError);
+    logger.error("All Groq attempts failed, using fallback", { error: lastError?.message });
     return this.getFallbackResult(lastError?.message);
   }
 
@@ -424,8 +424,10 @@ class CareerFeedbackService {
 
       return result;
     } catch (error) {
-      console.error("Failed to parse feedback result:", error);
-      console.error("Raw text:", text.substring(0, 500) + "...");
+      logger.error("Failed to parse feedback result", {
+        error,
+        rawText: text.substring(0, 500) + "...",
+      });
 
       // ✅ Try to extract data using regex as fallback
       return this.extractFeedbackFromText(text);
@@ -681,7 +683,7 @@ class CareerFeedbackService {
    */
   clearCache(): void {
     this.cache.flushAll();
-    console.log("Career feedback cache cleared");
+    logger.info("Career feedback cache cleared");
   }
 
   /**

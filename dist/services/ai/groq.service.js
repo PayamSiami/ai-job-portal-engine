@@ -1,6 +1,7 @@
 // backend/src/services/ai/groq.service.ts
 import Groq from "groq-sdk";
 import { config } from "../../config/index.js";
+import logger from "../../utils/logger.js";
 const groq = new Groq({
     apiKey: config.GROQ_API_KEY,
 });
@@ -27,19 +28,21 @@ export const generateWithGroq = async (prompt) => {
             max_tokens: 800,
         });
         const content = response.choices[0]?.message?.content || "";
-        // Log first 200 chars for debugging
-        console.log("📝 Groq response preview:", content.substring(0, 200) + "...");
+        logger.debug("Groq response preview", {
+            content: content.substring(0, 200) + "...",
+        });
         return {
             content,
             success: true,
         };
     }
     catch (error) {
-        console.error("Groq API error:", error.message);
+        const message = error instanceof Error ? error.message : "Unknown error";
+        logger.error("Groq API error:", { error: message });
         return {
             content: "",
             success: false,
-            error: error.message,
+            error: message,
         };
     }
 };
@@ -57,10 +60,11 @@ export const testGroqConnection = async () => {
         };
     }
     catch (error) {
-        console.error("Groq test failed:", error.message);
+        const message = error instanceof Error ? error.message : "Unknown error";
+        logger.error("Groq test failed:", { error: message });
         return {
             success: false,
-            message: error.message,
+            message,
         };
     }
 };

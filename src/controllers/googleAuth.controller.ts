@@ -37,7 +37,7 @@ export class GoogleAuthController {
    */
   linkGoogleAccount = catchAsync(async (req: Request, res: Response) => {
     const { idToken } = req.body;
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
 
     if (!idToken) {
       throw new AppError("Google ID token is required", 400);
@@ -79,7 +79,7 @@ export class GoogleAuthController {
    * Requires authentication
    */
   unlinkGoogleAccount = catchAsync(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
 
     if (!userId) {
       throw new AppError("User not authenticated", 401);

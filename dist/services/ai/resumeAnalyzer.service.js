@@ -15,9 +15,9 @@ class ResumeAnalyzerService {
     isAIEnabled = false;
     constructor() {
         const apiKey = config.GEMINI_API_KEY;
-        // ✅ Check if API key exists
+        // Check if API key exists
         if (!apiKey) {
-            console.warn("⚠️ GEMINI_API_KEY not found. AI features will be disabled.");
+            logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
             this.isAIEnabled = false;
         }
         else {
@@ -37,15 +37,15 @@ class ResumeAnalyzerService {
                         generationConfig,
                     });
                     this.isAIEnabled = true;
-                    console.log(`✅ Gemini AI initialized with model: ${modelName}`);
+                    logger.info(`Gemini AI initialized with model: ${modelName}`);
                 }
                 else {
-                    console.warn("⚠️ No Gemini model available. AI features will be disabled.");
+                    logger.warn("No Gemini model available. AI features will be disabled.");
                     this.isAIEnabled = false;
                 }
             }
             catch (error) {
-                console.warn("⚠️ Failed to initialize Gemini AI:", error);
+                logger.warn("Failed to initialize Gemini AI", { error });
                 this.isAIEnabled = false;
             }
         }
@@ -63,7 +63,7 @@ class ResumeAnalyzerService {
         const { retryCount = 2, useCache = true, industry, targetRole } = options;
         // ✅ If AI is disabled, use fallback
         if (!this.isAIEnabled || !this.model) {
-            console.warn("⚠️ AI not available, using fallback analysis");
+            logger.warn("AI not available, using fallback analysis");
             return this.getFallbackAnalysisResult(startTime);
         }
         let lastError = null;
@@ -128,7 +128,7 @@ class ResumeAnalyzerService {
                 });
                 // ✅ If it's a 403 error, don't retry (API key issue)
                 if (error instanceof Error && error.message.includes("403")) {
-                    console.error("❌ API key issue detected. Using fallback.");
+                    logger.error("API key issue detected. Using fallback.");
                     return this.getFallbackAnalysisResult(startTime);
                 }
                 if (attempt < retryCount) {
@@ -315,7 +315,7 @@ Provide specific, actionable suggestions.
     // ============ Public Utility Methods ============
     clearCache() {
         this.cache.flushAll();
-        console.log("Resume analyzer cache cleared");
+        logger.info("Resume analyzer cache cleared");
     }
     getCacheStats() {
         const keys = this.cache.keys();

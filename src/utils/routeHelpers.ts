@@ -18,7 +18,7 @@ export const getStringParam = (
  * Safely get user ID from request
  */
 export const getUserId = (req: Request): string | null => {
-  const user = (req as any).user;
+  const user = req.user;
   if (!user) return null;
   return user.id?.toString() || null;
 };

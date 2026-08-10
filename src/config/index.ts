@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
+import logger from "../utils/logger";
 
-dotenv.config({});
+dotenv.config();
 
 class Config {
   public GEMINI_API_KEY: string | undefined;
@@ -52,4 +53,40 @@ class Config {
   }
 }
 
-export const config: Config = new Config();
+const config: Config = new Config();
+
+/**
+ * Validate that all required environment variables are present.
+ * Throws an error listing missing keys so the server fails fast at startup
+ * instead of crashing at runtime with an opaque error.
+ */
+const validateConfig = (): void => {
+  const requiredKeys: { key: string; value: string | undefined }[] = [
+    { key: "MONGODB_URI", value: config.MONGODB_URI },
+    { key: "JWT_SECRET", value: config.JWT_SECRET },
+  ];
+
+  const missing = requiredKeys.filter(({ value }) => !value);
+
+  if (missing.length > 0) {
+    const missingKeys = missing.map(({ key }) => key).join(", ");
+    const error = new Error(
+      `Configuration error: missing required environment variables: ${missingKeys}`,
+    );
+    // eslint-disable-next-line no-throw-literal -- logging before throw for visibility
+    logger.error(error.message);
+    throw error;
+  }
+
+  if (config.JWT_SECRET && config.JWT_SECRET.length < 16) {
+    logger.warn(
+      "JWT_SECRET is shorter than 16 characters — use a strong secret in production.",
+    );
+  }
+
+  logger.info("Configuration validated successfully");
+};
+
+validateConfig();
+
+export { config };

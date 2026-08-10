@@ -27,7 +27,6 @@ const format = winston.format.combine(winston.format.timestamp({ format: "YYYY-M
 const fileFormat = winston.format.combine(winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss:ms" }), winston.format.json());
 // Define transports (where logs will be stored)
 const transports = [
-    // Console transport
     new winston.transports.Console({
         format,
     }),

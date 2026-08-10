@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../../config/index.js";
+import logger from "../../utils/logger.js";
 class JobService {
     genAI = null;
     model = null;
@@ -17,14 +18,14 @@ class JobService {
                         topP: 0.8,
                     },
                 });
-                console.log("✅ Gemini AI initialized successfully");
+                logger.info("Gemini AI initialized successfully");
             }
             catch (error) {
-                console.warn("⚠️ Failed to initialize Gemini AI:", error);
+                logger.warn("Failed to initialize Gemini AI", { error });
             }
         }
         else {
-            console.warn("⚠️ GEMINI_API_KEY not found. AI features will be disabled.");
+            logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
         }
     }
     cleanAIResponse(responseText) {
@@ -79,7 +80,7 @@ class JobService {
         }
         // Check if AI is available
         if (!this.model) {
-            console.warn("⚠️ AI not available. Using fallback parsing.");
+            logger.warn("AI not available. Using fallback parsing.");
             return this.parseFallback(query);
         }
         const prompt = `
@@ -138,8 +139,7 @@ class JobService {
             const result = await this.model.generateContent(prompt);
             const cleanedText = this.cleanAIResponse(result.response.text());
             const parsed = JSON.parse(cleanedText);
-            // Log what was parsed for debugging
-            console.log("AI Parsed Filters:", parsed);
+            logger.debug("AI Parsed Filters", { parsed });
             return {
                 rawQuery: query,
                 title: parsed.title || null,
@@ -153,7 +153,7 @@ class JobService {
             };
         }
         catch (error) {
-            console.error("Query parsing failed:", error);
+            logger.error("Query parsing failed", { error });
             return this.parseFallback(query);
         }
     }

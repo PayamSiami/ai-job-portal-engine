@@ -4,27 +4,32 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
-import authRoutes from "./routes/auth.routes.js";
-import jobRoutes from "./routes/job.routes.js";
-import applicationRoutes from "./routes/application.routes.js";
-import resumeRoutes from "./routes/resume.routes.js";
-import userRoutes from "./routes/user.routes.js";
+import { authRoutes, jobRoutes, applicationRoutes, resumeRoutes, userRoutes, dashboardRoutes, candidateRoutes, activityRoutes, companyRoutes, } from "./routes/index.js";
 import { config } from "./config/index.js";
 import { swaggerSpec, swaggerUi } from "./config/swagger.js";
 import healthService from "./services/health.service.js";
 import logger from "./utils/logger.js";
-import dashboardRoutes from "./routes/dashboard.routes.js";
-import candidateRoutes from "./routes/candidates.routes.js";
-import activityRoutes from "./routes/activity.routes.js";
-import companyRoutes from "./routes/company.routes.js";
+import { AppError, errorHandler } from "./utils/errorHandler.js";
 const app = express();
+// ============ Parse CORS Origins ============
+const parseCorsOrigins = (originString) => {
+    if (config.NODE_ENV === "production") {
+        return originString.split(",").map((origin) => origin.trim());
+    }
+    // In development, allow all origins or specific ones
+    return originString === "*"
+        ? ["*"]
+        : originString.split(",").map((origin) => origin.trim());
+};
+const corsOrigins = parseCorsOrigins(config.CORS_ORIGIN);
 // ============ Middleware ============
 app.use(cors({
-    origin: ["http://localhost:3000", "http://localhost:5173"],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    origin: corsOrigins,
+    credentials: config.CORS_CREDENTIALS,
+    methods: config.CORS_METHODS.split(",").map((method) => method.trim()),
+    allowedHeaders: config.CORS_ALLOWED_HEADERS.split(",").map((header) => header.trim()),
 }));
+// Dynamic CORS configuration based on environment
 app.use(helmet({
     contentSecurityPolicy: config.NODE_ENV === "production" ? undefined : false,
 }));
@@ -33,8 +38,8 @@ app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 // Rate limiting
 const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
+    windowMs: config.RATE_LIMIT_WINDOW_MS,
+    max: config.RATE_LIMIT_MAX,
     message: { error: "Too many requests from this IP, please try again later." },
 });
 app.use("/api/", apiLimiter);
@@ -52,7 +57,7 @@ app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     },
 }));
 // ============ Database Connection ============
-const MONGODB_URI = `mongodb://${config.DB_HOST || "mongodb"}:${config.DB_PORT || "27017"}/${config.DB_NAME || "jobportal"}`;
+const MONGODB_URI = config.MONGODB_URI;
 mongoose
     .connect(MONGODB_URI)
     .then(() => logger.info("✅ MongoDB connected"))
@@ -114,44 +119,15 @@ app.get("/health/ready", async (req, res) => {
         });
     }
 });
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({ error: "Route not found" });
+// 404 handler — delegate to the shared error handler for consistent response shape
+app.use((req, _res, next) => {
+    next(new AppError(`Route ${req.method} ${req.originalUrl} not found`, 404));
 });
 // ============ Global Error Handler ============
-app.use((err, req, res, next) => {
-    console.error("❌ Error:", {
-        message: err.message,
-        statusCode: err.statusCode || err.status,
-        stack: err.stack,
-        path: req.path,
-        method: req.method,
-    });
-    let statusCode = 500;
-    let message = "Internal server error";
-    if (err.statusCode && typeof err.statusCode === "number") {
-        statusCode = err.statusCode;
-        message = err.message || message;
-    }
-    else if (err.status && typeof err.status === "number") {
-        statusCode = err.status;
-        message = err.message || message;
-    }
-    else if (err.message) {
-        message = err.message;
-    }
-    res.status(statusCode).json({
-        success: false,
-        message,
-        ...(process.env.NODE_ENV === "development" && {
-            stack: err.stack,
-            error: err,
-        }),
-    });
-});
+app.use(errorHandler);
 const PORT = config.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📚 API Documentation: http://localhost:${PORT}/api/docs`);
+    logger.info(`🚀 Server running on http://localhost:${PORT}`);
+    logger.info(`📚 API Documentation: http://localhost:${PORT}/api/docs`);
 });
 export default app;

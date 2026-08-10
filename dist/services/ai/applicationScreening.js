@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
+import logger from "../../utils/logger.js";
 import hashString from "../../utils/hashString.js";
 // ============ Service Class ============
 class ApplicationScreeningService {
@@ -61,9 +62,9 @@ class ApplicationScreeningService {
                 return cachedResult;
             }
         }
-        // ✅ Check if AI model is available
+        // Check if AI model is available
         if (!this.model) {
-            console.warn("⚠️ AI model not available. Returning fallback result.");
+            logger.warn("AI model not available. Returning fallback result.");
             return this.getFallbackResult("AI model not initialized");
         }
         // Truncate inputs
@@ -101,13 +102,13 @@ class ApplicationScreeningService {
             }
             catch (error) {
                 lastError = error;
-                console.error(`Screening attempt ${attempt + 1} failed:`, error);
+                logger.error(`Screening attempt ${attempt + 1} failed`, { error });
                 if (attempt < retryCount) {
                     await this.delay(Math.pow(2, attempt) * 1000);
                 }
             }
         }
-        console.error("All screening attempts failed:", lastError);
+        logger.error("All screening attempts failed", { error: lastError });
         return this.getFallbackResult(lastError?.message);
     }
     // ============ Cache Helper Methods ============
@@ -138,7 +139,7 @@ class ApplicationScreeningService {
      */
     clearCache() {
         this.cache.flushAll();
-        console.log("Screening cache cleared");
+        logger.info("Screening cache cleared");
     }
     /**
      * Get cache statistics
@@ -242,7 +243,7 @@ class ApplicationScreeningService {
             return result;
         }
         catch (error) {
-            console.error("Failed to parse screening result:", error);
+            logger.error("Failed to parse screening result", { error });
             throw new Error("Invalid response format from AI");
         }
     }

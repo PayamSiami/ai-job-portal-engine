@@ -2,6 +2,7 @@
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
+import logger from "../../utils/logger.js";
 import hashString from "../../utils/hashString.js";
 // ============ Service Class ============
 class JobMatchRecommenderService {
@@ -55,7 +56,7 @@ class JobMatchRecommenderService {
             return filteredResults;
         }
         catch (error) {
-            console.error("Job matching failed:", error);
+            logger.error("Job matching failed", { error });
             return this.getFallbackResults(availableJobs, error);
         }
     }
@@ -70,7 +71,7 @@ class JobMatchRecommenderService {
         if (useCache) {
             const cached = this.cache.get(cacheKey);
             if (cached) {
-                console.log("Candidate profile retrieved from cache");
+                logger.info("Candidate profile retrieved from cache");
                 return cached;
             }
         }
@@ -108,7 +109,9 @@ class JobMatchRecommenderService {
             }
             catch (error) {
                 lastError = error;
-                console.error(`Profile extraction attempt ${attempt + 1} failed:`, error);
+                logger.error(`Profile extraction attempt ${attempt + 1} failed`, {
+                    error,
+                });
                 if (attempt < retryCount) {
                     await this.delay(Math.pow(2, attempt) * 1000);
                 }
@@ -173,8 +176,8 @@ class JobMatchRecommenderService {
             const cacheKey = this.generateJobMatchCacheKey(candidateProfile, job, includeBreakdown);
             const cached = this.cache.get(cacheKey);
             if (cached) {
-                console.log(`Job ${jobIndex + 1} retrieved from cache`);
-                // ✅ FIX: Ensure metadata exists when returning cached result
+                logger.info(`Job ${jobIndex + 1} retrieved from cache`);
+                // FIX: Ensure metadata exists when returning cached result
                 return {
                     ...cached,
                     metadata: {
@@ -195,7 +198,7 @@ class JobMatchRecommenderService {
                 const result = await this.model.generateContent(prompt);
                 const cleanedText = this.cleanAIResponse(result.response.text());
                 const matchData = this.parseMatchResult(cleanedText, job, includeBreakdown, startTime);
-                console.log(`Job ${jobIndex + 1} scored: ${matchData.matchScore}%`);
+                logger.debug(`Job ${jobIndex + 1} scored: ${matchData.matchScore}%`);
                 // Store in cache
                 if (useCache) {
                     const cacheKey = this.generateJobMatchCacheKey(candidateProfile, job, includeBreakdown);
@@ -210,7 +213,7 @@ class JobMatchRecommenderService {
                 }
             }
         }
-        console.error(`Failed to score job "${job.title}" after ${retryCount} retries:`, lastError);
+        logger.error(`Failed to score job "${job.title}" after ${retryCount} retries`, { error: lastError?.message });
         return null;
     }
     /**
@@ -468,7 +471,7 @@ class JobMatchRecommenderService {
      */
     clearCache() {
         this.cache.flushAll();
-        console.log("Job match cache cleared");
+        logger.info("Job match cache cleared");
     }
     /**
      * Get cache statistics

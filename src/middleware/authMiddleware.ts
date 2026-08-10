@@ -1,15 +1,15 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppError } from "../utils/errorHandler";
-import { getUserId } from "../utils/routeHelpers";
-import User from "../models/User.models";
+import User, { IUser } from "../models/User.models";
+import { config } from "../config";
 
 // Extend Express Request type
 declare global {
   namespace Express {
     interface Request {
+      user?: IUser;
       userId?: string;
-      user?: any;
     }
   }
 }
@@ -36,23 +36,22 @@ export const protect = async (
       );
     }
 
+    const jwtSecret = config.JWT_SECRET;
+    if (!jwtSecret) {
+      throw new AppError("JWT_SECRET is not configured on the server", 500);
+    }
+
     // Verify token
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "your-secret-key",
-    ) as { id: string };
+    const decoded = jwt.verify(token, jwtSecret) as { id: string };
 
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
-      res.status(401).json({ error: "Not authorized, user not found" });
-      return;
+      throw new AppError("User no longer exists", 401);
     }
 
-    // Attach user ID to request
     req.userId = decoded.id;
     req.user = user;
-
     next();
   } catch (error) {
     if (error instanceof AppError) {
@@ -68,14 +67,16 @@ export const protect = async (
  */
 export const authorize = (...roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user || !req.user.role) {
-      throw new AppError("User role not found", 403);
+    if (!req.user?.role) {
+      return next(new AppError("User role not found", 403));
     }
 
     if (!roles.includes(req.user.role)) {
-      throw new AppError(
-        `Access denied. Required role: ${roles.join(" or ")}`,
-        403,
+      return next(
+        new AppError(
+          `Access denied. Required role: ${roles.join(" or ")}`,
+          403,
+        ),
       );
     }
 

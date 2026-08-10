@@ -5,6 +5,7 @@ import Application, { ApplicationStatus } from "../models/Application.model.js";
 import Resume from "../models/Resume.models.js";
 import User from "../models/User.models.js";
 import jobService from "./job.service.js";
+import logger from "../utils/logger.js";
 export class CandidateService {
     Application;
     Job;
@@ -133,7 +134,7 @@ export class CandidateService {
             };
         }
         catch (error) {
-            console.error("Error in getCandidates:", error);
+            logger.error("Error in getCandidates:", error);
             throw new Error(`Failed to get candidates: ${error.message}`);
         }
     }
@@ -149,7 +150,7 @@ export class CandidateService {
                 isActive: true,
             });
             if (jobs.length === 0) {
-                console.log("⚠️ No active jobs found for employer");
+                logger.debug("No active jobs found for employer");
                 return [];
             }
             // 2. If jobId is provided, use that job, otherwise use all jobs
@@ -160,11 +161,11 @@ export class CandidateService {
                     targetJobs = [specificJob];
                 }
                 else {
-                    console.log(`⚠️ Job ${params.jobId} not found or not owned by employer`);
+                    logger.debug(`Job ${params.jobId} not found or not owned by employer`);
                     return [];
                 }
             }
-            console.log(`📊 Target jobs: ${targetJobs.length}`);
+            logger.debug(`📊 Target jobs: ${targetJobs.length}`);
             // 3. Get job IDs
             const jobIds = targetJobs.map((job) => job._id);
             // 4. Get all applications for these jobs
@@ -175,10 +176,10 @@ export class CandidateService {
                 .populate("jobId", "title company")
                 .populate("resumeId");
             if (applications.length === 0) {
-                console.log("⚠️ No applications found for target jobs");
+                logger.debug("⚠️ No applications found for target jobs");
                 return [];
             }
-            console.log(`📊 Found ${applications.length} applications`);
+            logger.debug(`📊 Found ${applications.length} applications`);
             // 5. Calculate match scores for each application
             const recommendations = [];
             for (const application of applications) {
@@ -218,11 +219,11 @@ export class CandidateService {
             // 6. Sort by match score descending and limit
             recommendations.sort((a, b) => b.matchScore - a.matchScore);
             const limitedRecommendations = recommendations.slice(0, params.limit);
-            console.log(`✅ Found ${limitedRecommendations.length} recommendations`);
+            logger.debug(`✅ Found ${limitedRecommendations.length} recommendations`);
             return limitedRecommendations;
         }
         catch (error) {
-            console.error("❌ Error getting candidate recommendations:", error);
+            logger.error("❌ Error getting candidate recommendations:", error);
             throw error;
         }
     }
@@ -371,10 +372,10 @@ export class CandidateService {
             // 1. Find the application
             const application = await this.Application.findById(candidateId);
             if (!application) {
-                console.log(`❌ Application not found: ${candidateId}`);
+                logger.debug(`❌ Application not found: ${candidateId}`);
                 return null;
             }
-            console.log(`✅ Application found:`, {
+            logger.debug(`✅ Application found:`, {
                 id: application._id,
                 jobId: application.jobId,
                 userId: application.userId,
@@ -387,7 +388,7 @@ export class CandidateService {
                 isDeleted: { $ne: true },
             });
             if (!job) {
-                console.log(`❌ Job not found or access denied for employer: ${employerId}`);
+                logger.debug(`❌ Job not found or access denied for employer: ${employerId}`);
                 return null;
             }
             // 3. Update status
@@ -409,7 +410,7 @@ export class CandidateService {
             // 7. If hired, add to employee records
             if (status === "hired") {
                 // Logic to add candidate as employee
-                console.log(`🎉 Candidate ${candidateId} was hired!`);
+                logger.debug(`🎉 Candidate ${candidateId} was hired!`);
                 // You can add employee creation logic here
             }
             // 8. Save the application
@@ -420,7 +421,7 @@ export class CandidateService {
             return application;
         }
         catch (error) {
-            console.error("❌ Error updating candidate status:", error);
+            logger.error("Error updating candidate status:", error);
             throw error;
         }
     }
@@ -430,14 +431,14 @@ export class CandidateService {
      */
     async getCandidateResume(candidateId, employerId) {
         try {
-            console.log(`📄 Fetching resume for candidate: ${candidateId}`);
+            logger.debug(`📄 Fetching resume for candidate: ${candidateId}`);
             // 1. Verify the application exists
             const application = await this.Application.findById(candidateId);
             if (!application) {
-                console.log(`❌ Application not found: ${candidateId}`);
+                logger.debug(`❌ Application not found: ${candidateId}`);
                 return null;
             }
-            console.log(`✅ Application found:`, {
+            logger.debug(`✅ Application found:`, {
                 id: application._id,
                 jobId: application.jobId,
                 userId: application.userId,
@@ -450,29 +451,29 @@ export class CandidateService {
                 isDeleted: { $ne: true },
             });
             if (!job) {
-                console.log(`❌ Job not found or access denied for employer: ${employerId}`);
+                logger.debug(`❌ Job not found or access denied for employer: ${employerId}`);
                 return null;
             }
-            console.log(`✅ Job belongs to employer: ${employerId}`);
+            logger.debug(`✅ Job belongs to employer: ${employerId}`);
             // 3. Find the resume
             // First try using resumeId from application
             let resume = null;
             if (application.resumeId) {
                 resume = await this.Resume.findById(application.resumeId);
-                console.log(`📄 Found resume by resumeId: ${!!resume}`);
+                logger.debug(`📄 Found resume by resumeId: ${!!resume}`);
             }
             // If not found by resumeId, try by userId
             if (!resume) {
                 resume = await this.Resume.findOne({
                     userId: application.userId,
                 });
-                console.log(`📄 Found resume by userId: ${!!resume}`);
+                logger.debug(`📄 Found resume by userId: ${!!resume}`);
             }
             if (!resume) {
-                console.log(`❌ Resume not found for user: ${application.userId}`);
+                logger.debug(`❌ Resume not found for user: ${application.userId}`);
                 return null;
             }
-            console.log(`✅ Resume found:`, {
+            logger.debug(`✅ Resume found:`, {
                 id: resume._id,
                 title: resume.title,
                 hasPdf: !!resume.pdfFile,
@@ -494,11 +495,11 @@ export class CandidateService {
             if (resume.filePath) {
                 return resume.filePath;
             }
-            console.log(`⚠️ Resume found but no PDF file attached`);
+            logger.debug(`⚠️ Resume found but no PDF file attached`);
             return null;
         }
         catch (error) {
-            console.error("❌ Error fetching candidate resume:", error);
+            logger.error("❌ Error fetching candidate resume:", error);
             throw error;
         }
     }
@@ -636,7 +637,7 @@ export class CandidateService {
             }));
         }
         catch (error) {
-            console.error("Error getting status summary:", error);
+            logger.error("Error getting status summary:", error);
             return [];
         }
     }
@@ -842,7 +843,7 @@ export class CandidateService {
      */
     async getShortlistedCandidates(employerId, options = {}) {
         try {
-            console.log(`📊 Fetching shortlisted candidates for employer: ${employerId}`);
+            logger.debug(`📊 Fetching shortlisted candidates for employer: ${employerId}`);
             const { page = 1, limit = 10, search = "", jobId, sortBy = "updatedAt", sortOrder = "desc", } = options;
             const skip = (page - 1) * limit;
             // 1. Get all jobs posted by this employer
@@ -934,7 +935,7 @@ export class CandidateService {
             };
         }
         catch (error) {
-            console.error("❌ Error in CandidateService.getShortlistedCandidates:", error);
+            logger.error("Error in CandidateService.getShortlistedCandidates:", error);
             throw error;
         }
     }
@@ -1026,7 +1027,7 @@ export class CandidateService {
      */
     async getShortlistedApplications(employerId, options = {}) {
         try {
-            console.log(`📊 Fetching shortlisted applications for employer: ${employerId}`);
+            logger.debug(`📊 Fetching shortlisted applications for employer: ${employerId}`);
             const { page = 1, limit = 10, search = "", jobId, status, stage, sortBy = "updatedAt", sortOrder = "desc", startDate, endDate, } = options;
             const skip = (page - 1) * limit;
             // 1. Get all jobs posted by this employer
@@ -1162,7 +1163,7 @@ export class CandidateService {
             };
         }
         catch (error) {
-            console.error("❌ Error in CandidateService.getShortlistedApplications:", error);
+            logger.error("Error in CandidateService.getShortlistedApplications:", error);
             throw error;
         }
     }
@@ -1289,14 +1290,14 @@ export class CandidateService {
      */
     async getShortlistedCandidateResume(candidateId, employerId, format = "pdf") {
         try {
-            console.log(`📄 Fetching resume for shortlisted candidate: ${candidateId}`);
+            logger.debug(`📄 Fetching resume for shortlisted candidate: ${candidateId}`);
             // 1. Find the application
             const application = await this.Application.findById(candidateId)
                 .populate("userId", "name email")
                 .populate("jobId", "title company")
                 .populate("resumeId");
             if (!application) {
-                console.log(`❌ Application not found: ${candidateId}`);
+                logger.debug(`❌ Application not found: ${candidateId}`);
                 return null;
             }
             // 2. Verify the job belongs to this employer
@@ -1310,12 +1311,12 @@ export class CandidateService {
                 isDeleted: { $ne: true },
             });
             if (!job) {
-                console.log(`❌ Job not found or access denied for employer: ${employerId}`);
+                logger.debug(`❌ Job not found or access denied for employer: ${employerId}`);
                 return null;
             }
             // 3. Check if candidate is shortlisted
             if (!["shortlisted", "interview_scheduled"].includes(application.status)) {
-                console.log(`❌ Candidate is not shortlisted. Status: ${application.status}`);
+                logger.debug(`❌ Candidate is not shortlisted. Status: ${application.status}`);
                 return null;
             }
             // 4. Get the resume
@@ -1325,10 +1326,10 @@ export class CandidateService {
                 resume = await this.Resume.findOne({ userId: application.userId });
             }
             if (!resume) {
-                console.log(`❌ Resume not found for user: ${application.userId}`);
+                logger.debug(`❌ Resume not found for user: ${application.userId}`);
                 return null;
             }
-            console.log(`✅ Resume found: ${resume.title || "Untitled"}`);
+            logger.debug(`✅ Resume found: ${resume.title || "Untitled"}`);
             // 5. Prepare response based on format
             const metadata = {
                 candidateName: application.userId?.name || "Unknown",
@@ -1367,7 +1368,7 @@ export class CandidateService {
                 // Return URL to the resume file
                 const resumeUrl = resume.pdfUrl || resume.fileUrl || resume.cloudStorageUrl;
                 if (!resumeUrl) {
-                    console.log(`❌ No URL found for resume`);
+                    logger.debug(`❌ No URL found for resume`);
                     return null;
                 }
                 return {
@@ -1410,11 +1411,11 @@ export class CandidateService {
                     metadata,
                 };
             }
-            console.log(`❌ No PDF file found for resume`);
+            logger.debug(`❌ No PDF file found for resume`);
             return null;
         }
         catch (error) {
-            console.error("❌ Error in CandidateService.getShortlistedCandidateResume:", error);
+            logger.error("Error in CandidateService.getShortlistedCandidateResume:", error);
             throw error;
         }
     }
@@ -1464,7 +1465,7 @@ export class CandidateService {
             };
         }
         catch (error) {
-            console.error("❌ Error in CandidateService.getShortlistedCandidateResumes:", error);
+            logger.error("Error in CandidateService.getShortlistedCandidateResumes:", error);
             throw error;
         }
     }

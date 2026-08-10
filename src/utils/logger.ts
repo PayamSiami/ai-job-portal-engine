@@ -43,7 +43,6 @@ const fileFormat = winston.format.combine(
 
 // Define transports (where logs will be stored)
 const transports = [
-  // Console transport
   new winston.transports.Console({
     format,
   }),

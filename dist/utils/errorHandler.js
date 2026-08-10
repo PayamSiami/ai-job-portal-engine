@@ -1,3 +1,4 @@
+import logger from "./logger.js";
 export class AppError extends Error {
     statusCode;
     status;
@@ -16,7 +17,7 @@ export const errorHandler = (err, req, res, next) => {
     const message = err.message || "Something went wrong";
     // ✅ Use statusCode, NOT err.status
     const status = statusCode >= 400 && statusCode < 500 ? "fail" : "error";
-    console.error("❌ Error:", {
+    logger.error("Error occurred", {
         statusCode,
         status,
         message,
@@ -45,7 +46,7 @@ export const errorHandler = (err, req, res, next) => {
         }
         else {
             // Programming or other unknown error: don't leak error details
-            console.error("💥 Unhandled error:", err);
+            logger.error("Unhandled error", err);
             res.status(500).json({
                 success: false,
                 message: "Something went wrong",

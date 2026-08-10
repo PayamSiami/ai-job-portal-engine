@@ -1,5 +1,16 @@
 // backend/src/utils/errorHandler.ts
 import { Request, Response, NextFunction } from "express";
+import logger from "./logger";
+
+/**
+ * Extended error interface for typed error handling in Express middleware.
+ */
+export interface TypedError extends Error {
+  statusCode?: number;
+  status?: string;
+  isOperational?: boolean;
+  code?: string;
+}
 
 export class AppError extends Error {
   public statusCode: number;
@@ -17,7 +28,7 @@ export class AppError extends Error {
 }
 
 export const errorHandler = (
-  err: any,
+  err: TypedError,
   req: Request,
   res: Response,
   next: NextFunction,
@@ -29,7 +40,7 @@ export const errorHandler = (
   // ✅ Use statusCode, NOT err.status
   const status = statusCode >= 400 && statusCode < 500 ? "fail" : "error";
 
-  console.error("❌ Error:", {
+  logger.error("Error occurred", {
     statusCode,
     status,
     message,
@@ -57,7 +68,7 @@ export const errorHandler = (
       });
     } else {
       // Programming or other unknown error: don't leak error details
-      console.error("💥 Unhandled error:", err);
+      logger.error("Unhandled error", err);
       res.status(500).json({
         success: false,
         message: "Something went wrong",

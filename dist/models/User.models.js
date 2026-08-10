@@ -25,7 +25,7 @@ const userSchema = new Schema({
     },
     password: {
         type: String,
-        required: true,
+        required: false, // Not required for OAuth users
         select: false,
         minlength: 8,
     },
@@ -34,6 +34,18 @@ const userSchema = new Schema({
         enum: Object.values(UserRole),
         required: true,
         default: UserRole.JOB_SEEKER,
+    },
+    // Google OAuth fields
+    googleId: {
+        type: String,
+        unique: true,
+        sparse: true, // Allow null values but unique when present
+        select: false,
+    },
+    authProvider: {
+        type: String,
+        enum: ["local", "google"],
+        default: "local",
     },
     profile: {
         firstName: String,
@@ -71,13 +83,15 @@ const userSchema = new Schema({
     toObject: { versionKey: false },
 });
 userSchema.pre("save", async function () {
-    if (!this.isModified("password")) {
+    if (!this.isModified("password") || !this.password) {
         return;
     }
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
 });
 userSchema.methods.comparePassword = async function (candidatePassword) {
+    if (!this.password)
+        return false;
     return bcrypt.compare(candidatePassword, this.password);
 };
 userSchema.methods.toPublicJSON = function () {

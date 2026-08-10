@@ -8,6 +8,9 @@ export class CompanyController {
         if (!data.name) {
             throw new AppError("Company name is required", 400);
         }
+        if (!userId) {
+            throw new Error("User not found");
+        }
         // Check if employer already has a company
         const existingCompany = await companyService.hasCompany(userId);
         if (existingCompany) {
@@ -22,6 +25,9 @@ export class CompanyController {
     });
     getCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
+        if (!userId) {
+            throw new Error("User not found");
+        }
         const company = await companyService.getCompanyWithStats(userId);
         if (!company) {
             throw new AppError("Company not found", 404);
@@ -33,6 +39,9 @@ export class CompanyController {
     });
     checkCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
+        if (!userId) {
+            throw new Error("User not found");
+        }
         const hasCompany = await companyService.hasCompany(userId);
         res.status(200).json({
             success: true,
@@ -42,6 +51,9 @@ export class CompanyController {
     updateCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
         const data = req.body;
+        if (!userId) {
+            throw new Error("User not found");
+        }
         const company = await companyService.getCompanyByOwnerId(userId);
         if (!company) {
             throw new AppError("Company not found", 404);
@@ -55,6 +67,9 @@ export class CompanyController {
     });
     deleteCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
+        if (!userId) {
+            throw new Error("User not found");
+        }
         const company = await companyService.getCompanyByOwnerId(userId);
         if (!company) {
             throw new AppError("Company not found", 404);
@@ -70,6 +85,9 @@ export class CompanyController {
         if (!req.file) {
             throw new AppError("No file uploaded", 400);
         }
+        if (!userId) {
+            throw new Error("User not found");
+        }
         const logoUrl = await companyService.uploadLogo(userId, req.file);
         res.status(200).json({
             success: true,
@@ -79,6 +97,9 @@ export class CompanyController {
     });
     getCompanyStats = catchAsync(async (req, res) => {
         const userId = req.user?.id;
+        if (!userId) {
+            throw new Error("User not found");
+        }
         const stats = await companyService.getCompanyStats(userId);
         res.status(200).json({
             success: true,

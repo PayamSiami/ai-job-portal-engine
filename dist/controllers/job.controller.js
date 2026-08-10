@@ -210,7 +210,6 @@ class JobController {
             limit: 20,
         });
         sendSuccess(res, {
-            query,
             parsedFilters,
             results: jobs,
         }, "AI search completed successfully");

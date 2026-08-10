@@ -9,6 +9,7 @@ export enum UserRole {
 
 
 export interface IUser extends Document {
+  id?:string;
   username: string;
   email: string;
   password?: string; // Optional for OAuth users

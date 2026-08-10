@@ -6,11 +6,15 @@ import companyService from "../services/company.service";
 
 export class CompanyController {
   createCompany = catchAsync(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const data = req.body;
 
     if (!data.name) {
       throw new AppError("Company name is required", 400);
+    }
+
+    if (!userId) {
+      throw new Error("User not found");
     }
 
     // Check if employer already has a company
@@ -29,7 +33,11 @@ export class CompanyController {
   });
 
   getCompany = catchAsync(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User not found");
+    }
 
     const company = await companyService.getCompanyWithStats(userId);
 
@@ -44,7 +52,11 @@ export class CompanyController {
   });
 
   checkCompany = catchAsync(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User not found");
+    }
 
     const hasCompany = await companyService.hasCompany(userId);
 
@@ -55,8 +67,12 @@ export class CompanyController {
   });
 
   updateCompany = catchAsync(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const data = req.body;
+
+    if (!userId) {
+      throw new Error("User not found");
+    }
 
     const company = await companyService.getCompanyByOwnerId(userId);
     if (!company) {
@@ -77,7 +93,11 @@ export class CompanyController {
   });
 
   deleteCompany = catchAsync(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User not found");
+    }
 
     const company = await companyService.getCompanyByOwnerId(userId);
     if (!company) {
@@ -93,10 +113,14 @@ export class CompanyController {
   });
 
   uploadLogo = catchAsync(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
 
     if (!req.file) {
       throw new AppError("No file uploaded", 400);
+    }
+
+    if (!userId) {
+      throw new Error("User not found");
     }
 
     const logoUrl = await companyService.uploadLogo(userId, req.file);
@@ -109,7 +133,11 @@ export class CompanyController {
   });
 
   getCompanyStats = catchAsync(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new Error("User not found");
+    }
 
     const stats = await companyService.getCompanyStats(userId);
 

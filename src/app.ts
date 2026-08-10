@@ -4,19 +4,22 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
-import authRoutes from "./routes/auth.routes";
-import jobRoutes from "./routes/job.routes";
-import applicationRoutes from "./routes/application.routes";
-import resumeRoutes from "./routes/resume.routes";
-import userRoutes from "./routes/user.routes";
+import {
+  authRoutes,
+  jobRoutes,
+  applicationRoutes,
+  resumeRoutes,
+  userRoutes,
+  dashboardRoutes,
+  candidateRoutes,
+  activityRoutes,
+  companyRoutes,
+} from "./routes";
 import { config } from "./config";
 import { swaggerSpec, swaggerUi } from "./config/swagger";
 import healthService from "./services/health.service";
 import logger from "./utils/logger";
-import dashboardRoutes from "./routes/dashboard.routes";
-import candidateRoutes from "./routes/candidates.routes";
-import activityRoutes from "./routes/activity.routes";
-import companyRoutes from "./routes/company.routes";
+import { AppError, errorHandler } from "./utils/errorHandler";
 
 const app = express();
 
@@ -150,49 +153,19 @@ app.get("/health/ready", async (req, res) => {
   }
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: "Route not found" });
+// 404 handler — delegate to the shared error handler for consistent response shape
+app.use((req, _res, next) => {
+  next(new AppError(`Route ${req.method} ${req.originalUrl} not found`, 404));
 });
 
 // ============ Global Error Handler ============
-app.use((err: any, req: any, res: any, next: any) => {
-  console.error("❌ Error:", {
-    message: err.message,
-    statusCode: err.statusCode || err.status,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-  });
-
-  let statusCode = 500;
-  let message = "Internal server error";
-
-  if (err.statusCode && typeof err.statusCode === "number") {
-    statusCode = err.statusCode;
-    message = err.message || message;
-  } else if (err.status && typeof err.status === "number") {
-    statusCode = err.status;
-    message = err.message || message;
-  } else if (err.message) {
-    message = err.message;
-  }
-
-  res.status(statusCode).json({
-    success: false,
-    message,
-    ...(process.env.NODE_ENV === "development" && {
-      stack: err.stack,
-      error: err,
-    }),
-  });
-});
+app.use(errorHandler);
 
 const PORT = config.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📚 API Documentation: http://localhost:${PORT}/api/docs`);
+  logger.info(`🚀 Server running on http://localhost:${PORT}`);
+  logger.info(`📚 API Documentation: http://localhost:${PORT}/api/docs`);
 });
 
 export default app;

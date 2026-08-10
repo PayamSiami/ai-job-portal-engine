@@ -6,6 +6,7 @@ import {
 } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index";
+import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
 
 // ============ Type Definitions ============
@@ -194,7 +195,7 @@ class JobMatchRecommenderService {
 
       return filteredResults;
     } catch (error) {
-      console.error("Job matching failed:", error);
+      logger.error("Job matching failed", { error });
       return this.getFallbackResults(availableJobs, error as Error);
     }
   }
@@ -220,7 +221,7 @@ class JobMatchRecommenderService {
     if (useCache) {
       const cached = this.cache.get<CandidateProfile>(cacheKey);
       if (cached) {
-        console.log("Candidate profile retrieved from cache");
+        logger.info("Candidate profile retrieved from cache");
         return cached;
       }
     }
@@ -262,10 +263,9 @@ class JobMatchRecommenderService {
         return profile;
       } catch (error) {
         lastError = error as Error;
-        console.error(
-          `Profile extraction attempt ${attempt + 1} failed:`,
+        logger.error(`Profile extraction attempt ${attempt + 1} failed`, {
           error,
-        );
+        });
 
         if (attempt < retryCount) {
           await this.delay(Math.pow(2, attempt) * 1000);
@@ -384,8 +384,8 @@ class JobMatchRecommenderService {
       );
       const cached = this.cache.get<JobMatchResult>(cacheKey);
       if (cached) {
-        console.log(`Job ${jobIndex + 1} retrieved from cache`);
-        // ✅ FIX: Ensure metadata exists when returning cached result
+        logger.info(`Job ${jobIndex + 1} retrieved from cache`);
+        // FIX: Ensure metadata exists when returning cached result
         return {
           ...cached,
           metadata: {
@@ -419,7 +419,7 @@ class JobMatchRecommenderService {
           startTime,
         );
 
-        console.log(`Job ${jobIndex + 1} scored: ${matchData.matchScore}%`);
+        logger.debug(`Job ${jobIndex + 1} scored: ${matchData.matchScore}%`);
 
         // Store in cache
         if (useCache) {
@@ -440,9 +440,9 @@ class JobMatchRecommenderService {
       }
     }
 
-    console.error(
-      `Failed to score job "${job.title}" after ${retryCount} retries:`,
-      lastError,
+    logger.error(
+      `Failed to score job "${job.title}" after ${retryCount} retries`,
+      { error: lastError?.message },
     );
     return null;
   }
@@ -768,7 +768,7 @@ class JobMatchRecommenderService {
    */
   clearCache(): void {
     this.cache.flushAll();
-    console.log("Job match cache cleared");
+    logger.info("Job match cache cleared");
   }
 
   /**

@@ -23,14 +23,14 @@ class JobService {
                         maxOutputTokens: 2048,
                     },
                 });
-                console.log("✅ Gemini AI initialized successfully");
+                logger.info("Gemini AI initialized successfully");
             }
             catch (error) {
-                console.warn("⚠️ Failed to initialize Gemini AI:", error);
+                logger.warn("Failed to initialize Gemini AI", { error });
             }
         }
         else {
-            console.warn("⚠️ GEMINI_API_KEY not found. AI features will be disabled.");
+            logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
         }
     }
     async getJobs(filters = {}, options = {}) {
@@ -158,7 +158,7 @@ class JobService {
         }
         // Check if AI model is available
         if (!this.model) {
-            console.warn("⚠️ AI model not available. Using fallback content generation.");
+            logger.warn("AI model not available. Using fallback content generation.");
             return this.generateFallbackJobContent(jobTitle);
         }
         const prompt = `
@@ -243,8 +243,8 @@ class JobService {
             return parsed;
         }
         catch (error) {
-            console.error("❌ Job content generation failed:", error);
-            console.warn("⚠️ Using fallback content generation.");
+            logger.error("Job content generation failed", { error });
+            logger.warn("Using fallback content generation.");
             return this.generateFallbackJobContent(jobTitle);
         }
     }
@@ -693,7 +693,7 @@ class JobService {
             return jobs;
         }
         catch (error) {
-            console.error("Error in getJobsByEmployer:", error);
+            logger.error("Error in getJobsByEmployer", { error });
             throw new Error(`Failed to get jobs by employer: ${error.message}`);
         }
     }
@@ -860,8 +860,10 @@ class JobService {
             if (error instanceof AppError)
                 throw error;
             if (error instanceof Error) {
-                console.error("Error message:", error.message);
-                console.error("Error stack:", error.stack);
+                logger.error("Error updating job", {
+                    message: error.message,
+                    stack: error.stack,
+                });
             }
             throw new AppError("Failed to update job. Please check your input.", 400);
         }

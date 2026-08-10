@@ -2,6 +2,7 @@
 import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
+import logger from "../../utils/logger.js";
 import hashString from "../../utils/hashString.js";
 // ============ Service Class ============
 class CoverLetterGeneratorService {
@@ -15,9 +16,9 @@ class CoverLetterGeneratorService {
     isAIEnabled = false;
     constructor() {
         const apiKey = config.GEMINI_API_KEY;
-        // ✅ Check if API key exists
+        // Check if API key exists
         if (!apiKey) {
-            console.warn("⚠️ GEMINI_API_KEY not found. AI features will be disabled.");
+            logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
             this.isAIEnabled = false;
         }
         else {
@@ -37,15 +38,15 @@ class CoverLetterGeneratorService {
                         generationConfig,
                     });
                     this.isAIEnabled = true;
-                    console.log(`✅ Gemini AI initialized with model: ${modelName}`);
+                    logger.info(`Gemini AI initialized with model: ${modelName}`);
                 }
                 else {
-                    console.warn("⚠️ No Gemini model available. AI features will be disabled.");
+                    logger.warn("No Gemini model available. AI features will be disabled.");
                     this.isAIEnabled = false;
                 }
             }
             catch (error) {
-                console.warn("⚠️ Failed to initialize Gemini AI:", error);
+                logger.warn("Failed to initialize Gemini AI", { error });
                 this.isAIEnabled = false;
             }
         }
@@ -70,9 +71,9 @@ class CoverLetterGeneratorService {
     async generateCoverLetter(jobDetails, resumeText, options = {}) {
         const startTime = Date.now();
         const { maxWords = this.DEFAULT_MAX_WORDS, tone = "professional", retryCount = 2, useCache = true, focusSkills, includeAchievements = true, } = options;
-        // ✅ If AI is disabled, use fallback
+        // If AI is disabled, use fallback
         if (!this.isAIEnabled || !this.model) {
-            console.warn("⚠️ AI not available, using fallback cover letter generation");
+            logger.warn("AI not available, using fallback cover letter generation");
             return this.generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime);
         }
         let lastError = null;
@@ -113,10 +114,12 @@ class CoverLetterGeneratorService {
                 }
                 catch (error) {
                     lastError = error;
-                    console.error(`Cover letter generation attempt ${attempt + 1} failed:`, error);
-                    // ✅ If it's a 403 error, don't retry (API key issue)
+                    logger.error(`Cover letter generation attempt ${attempt + 1} failed`, {
+                        error,
+                    });
+                    // If it's a 403 error, don't retry (API key issue)
                     if (error instanceof Error && error.message.includes("403")) {
-                        console.error("❌ API key issue detected. Using fallback.");
+                        logger.error("API key issue detected. Using fallback.");
                         return this.generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime);
                     }
                     if (attempt < retryCount) {
@@ -124,11 +127,13 @@ class CoverLetterGeneratorService {
                     }
                 }
             }
-            console.error("All cover letter generation attempts failed:", lastError);
+            logger.error("All cover letter generation attempts failed", {
+                error: lastError?.message,
+            });
             return this.generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime);
         }
         catch (error) {
-            console.error("Error generating cover letter:", error);
+            logger.error("Error generating cover letter", { error });
             return this.generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime);
         }
     }
@@ -364,7 +369,7 @@ ${name}
      */
     clearCache() {
         this.cache.flushAll();
-        console.log("Cover letter cache cleared");
+        logger.info("Cover letter cache cleared");
     }
     /**
      * Get cache statistics
