@@ -11,7 +11,7 @@ export enum UserRole {
 export interface IUser extends Document {
   username: string;
   email: string;
-  password: string;
+  password?: string; // Optional for OAuth users
   role: UserRole;
   profile: {
     firstName?: string;
@@ -32,6 +32,9 @@ export interface IUser extends Document {
   resumeId?: mongoose.Types.ObjectId;
   isActive: boolean;
   lastLogin?: Date;
+  // Google OAuth fields
+  googleId?: string;
+  authProvider?: "local" | "google";
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -58,7 +61,7 @@ const userSchema = new Schema<IUser>(
     },
     password: {
       type: String,
-      required: true,
+      required: false, // Not required for OAuth users
       select: false,
       minlength: 8,
     },
@@ -67,6 +70,18 @@ const userSchema = new Schema<IUser>(
       enum: Object.values(UserRole),
       required: true,
       default: UserRole.JOB_SEEKER,
+    },
+    // Google OAuth fields
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true, // Allow null values but unique when present
+      select: false,
+    },
+    authProvider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
     },
     profile: {
       firstName: String,
@@ -107,7 +122,7 @@ const userSchema = new Schema<IUser>(
 );
 
 userSchema.pre("save", async function (this: IUser) {
-  if (!this.isModified("password")) {
+  if (!this.isModified("password") || !this.password) {
     return;
   }
   const salt = await bcrypt.genSalt(12);
@@ -118,6 +133,7 @@ userSchema.methods.comparePassword = async function (
   this: IUser,
   candidatePassword: string,
 ): Promise<boolean> {
+  if (!this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
 

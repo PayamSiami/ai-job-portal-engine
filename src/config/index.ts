@@ -21,6 +21,9 @@ class Config {
   public CORS_ALLOWED_HEADERS: string;
   public RATE_LIMIT_WINDOW_MS: number;
   public RATE_LIMIT_MAX: number;
+  // Google OAuth
+  public GOOGLE_CLIENT_ID: string | undefined;
+  public GOOGLE_CLIENT_SECRET: string | undefined;
 
   constructor() {
     this.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
@@ -43,6 +46,9 @@ class Config {
     this.CORS_ALLOWED_HEADERS = process.env.CORS_ALLOWED_HEADERS || "";
     this.RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000", 10);
     this.RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || "50", 10);
+    // Google OAuth
+    this.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+    this.GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
   }
 }
 

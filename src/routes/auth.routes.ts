@@ -8,6 +8,7 @@ import {
 import authService from "../services/auth.service";
 import { protect } from "../middleware/authMiddleware";
 import { getUserId } from "../utils/routeHelpers";
+import googleAuthController from "../controllers/googleAuth.controller";
 
 const router: Router = express.Router();
 
@@ -201,5 +202,80 @@ router.get(
     }
   },
 );
+
+/**
+ * @swagger
+ * /api/auth/google:
+ *   post:
+ *     summary: Google OAuth login/signup
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - idToken
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *                 description: Google ID token from frontend
+ *               role:
+ *                 type: string
+ *                 enum: [job-seeker, employer]
+ *                 default: job-seeker
+ *     responses:
+ *       200:
+ *         description: Authentication successful
+ *       400:
+ *         description: Invalid token or missing idToken
+ *       500:
+ *         description: Server error
+ */
+router.post("/google", googleAuthController.googleAuth);
+
+/**
+ * @swagger
+ * /api/auth/google/link:
+ *   post:
+ *     summary: Link Google account to existing user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - idToken
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Google account linked
+ *       401:
+ *         description: Not authenticated
+ */
+router.post("/google/link", protect, googleAuthController.linkGoogleAccount);
+
+/**
+ * @swagger
+ * /api/auth/google/unlink:
+ *   post:
+ *     summary: Unlink Google account from user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Google account unlinked
+ *       401:
+ *         description: Not authenticated
+ */
+router.post("/google/unlink", protect, googleAuthController.unlinkGoogleAccount);
 
 export default router;
