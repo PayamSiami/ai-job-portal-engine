@@ -134,8 +134,9 @@ export class CandidateService {
             };
         }
         catch (error) {
-            logger.error("Error in getCandidates:", error);
-            throw new Error(`Failed to get candidates: ${error.message}`);
+            const message = error instanceof Error ? error.message : "Unknown error";
+            logger.error("Error in getCandidates", { error: message });
+            throw new Error(`Failed to get candidates: ${message}`);
         }
     }
     /**

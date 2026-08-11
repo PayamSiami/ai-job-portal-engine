@@ -693,8 +693,9 @@ class JobService {
             return jobs;
         }
         catch (error) {
-            logger.error("Error in getJobsByEmployer", { error });
-            throw new Error(`Failed to get jobs by employer: ${error.message}`);
+            const message = error instanceof Error ? error.message : "Unknown error";
+            logger.error("Error in getJobsByEmployer", { error: message });
+            throw new Error(`Failed to get jobs by employer: ${message}`);
         }
     }
     /**

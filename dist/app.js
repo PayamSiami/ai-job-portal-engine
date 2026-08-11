@@ -1,5 +1,4 @@
 import express from "express";
-import mongoose from "mongoose";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -10,6 +9,7 @@ import { swaggerSpec, swaggerUi } from "./config/swagger.js";
 import healthService from "./services/health.service.js";
 import logger from "./utils/logger.js";
 import { AppError, errorHandler } from "./utils/errorHandler.js";
+import { connectDB } from "./utils/database.js";
 const app = express();
 // ============ Parse CORS Origins ============
 const parseCorsOrigins = (originString) => {
@@ -56,12 +56,7 @@ app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
         showCommonExtensions: true,
     },
 }));
-// ============ Database Connection ============
-const MONGODB_URI = config.MONGODB_URI;
-mongoose
-    .connect(MONGODB_URI)
-    .then(() => logger.info("✅ MongoDB connected"))
-    .catch((err) => logger.error("⚠️ MongoDB not connected:", err.message));
+await connectDB();
 // ============ Routes ============
 app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
