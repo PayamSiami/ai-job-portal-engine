@@ -9,7 +9,6 @@ import authService from "../services/auth.service";
 import { protect } from "../middleware/authMiddleware";
 import { getUserId } from "../utils/routeHelpers";
 import googleAuthController from "../controllers/googleAuth.controller";
-
 const router: Router = express.Router();
 
 /**
@@ -155,6 +154,7 @@ router.post(
     try {
       const { user, token } = await authService.login(req.body);
 
+
       res.json({
         user: {
           id: user._id,
@@ -276,6 +276,10 @@ router.post("/google/link", protect, googleAuthController.linkGoogleAccount);
  *       401:
  *         description: Not authenticated
  */
-router.post("/google/unlink", protect, googleAuthController.unlinkGoogleAccount);
+router.post(
+  "/google/unlink",
+  protect,
+  googleAuthController.unlinkGoogleAccount,
+);
 
 export default router;

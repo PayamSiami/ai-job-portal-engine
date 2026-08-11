@@ -5,7 +5,6 @@ import { sendSuccess } from "../utils/responseFormatter";
 import { AppError } from "../utils/errorHandler";
 import { getUserId } from "../utils/routeHelpers";
 import { asyncHandler } from "./base.controller";
-
 /**
  * Job Controller
  * Handles all job-related operations

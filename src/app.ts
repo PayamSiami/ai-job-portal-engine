@@ -1,5 +1,4 @@
 import express from "express";
-import mongoose from "mongoose";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -20,6 +19,7 @@ import { swaggerSpec, swaggerUi } from "./config/swagger";
 import healthService from "./services/health.service";
 import logger from "./utils/logger";
 import { AppError, errorHandler } from "./utils/errorHandler";
+import { connectDB } from "./utils/database";
 
 const app = express();
 
@@ -86,13 +86,7 @@ app.use(
   }),
 );
 
-// ============ Database Connection ============
-const MONGODB_URI = config.MONGODB_URI;
-
-mongoose
-  .connect(MONGODB_URI)
-  .then(() => logger.info("✅ MongoDB connected"))
-  .catch((err) => logger.error("⚠️ MongoDB not connected:", err.message));
+await connectDB();
 
 // ============ Routes ============
 app.use("/api/auth", authRoutes);
