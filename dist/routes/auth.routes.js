@@ -3,7 +3,7 @@ import express from "express";
 import { validateRegistration, validateLogin, } from "../middleware/validation.middleware.js";
 import authService from "../services/auth.service.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { getUserId } from "../utils/routeHelpers.js";
+import { sendSuccess, sendError } from "../utils/responseFormatter.js";
 import googleAuthController from "../controllers/googleAuth.controller.js";
 const router = express.Router();
 /**
@@ -50,18 +50,16 @@ const router = express.Router();
  *             schema:
  *               type: object
  *               properties:
- *                 user:
+ *                 success:
+ *                   type: boolean
+ *                 data:
  *                   type: object
  *                   properties:
- *                     id:
+ *                     user:
+ *                       type: object
+ *                     token:
  *                       type: string
- *                     username:
- *                       type: string
- *                     email:
- *                       type: string
- *                     role:
- *                       type: string
- *                 token:
+ *                 message:
  *                   type: string
  *       400:
  *         description: Validation error or user already exists
@@ -71,19 +69,10 @@ const router = express.Router();
 router.post("/register", validateRegistration, async (req, res) => {
     try {
         const { user, token } = await authService.register(req.body);
-        res.status(201).json({
-            user: {
-                id: user._id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
-            },
-            token,
-        });
+        sendSuccess(res, { user, token }, "User registered successfully", 201);
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Registration failed";
-        res.status(400).json({ error: errorMessage });
+        sendError(res, error, error instanceof Error && error.message.includes("already") ? 400 : 500);
     }
 });
 /**
@@ -118,18 +107,16 @@ router.post("/register", validateRegistration, async (req, res) => {
  *             schema:
  *               type: object
  *               properties:
- *                 user:
+ *                 success:
+ *                   type: boolean
+ *                 data:
  *                   type: object
  *                   properties:
- *                     id:
+ *                     user:
+ *                       type: object
+ *                     token:
  *                       type: string
- *                     username:
- *                       type: string
- *                     email:
- *                       type: string
- *                     role:
- *                       type: string
- *                 token:
+ *                 message:
  *                   type: string
  *       401:
  *         description: Invalid credentials
@@ -139,41 +126,55 @@ router.post("/register", validateRegistration, async (req, res) => {
 router.post("/login", validateLogin, async (req, res) => {
     try {
         const { user, token } = await authService.login(req.body);
-        res.json({
-            user: {
-                id: user._id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
-            },
-            token,
-        });
+        sendSuccess(res, { user, token }, "Login successful");
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Login failed";
-        res.status(400).json({ error: errorMessage });
+        sendError(res, error, 401);
     }
 });
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Get current user profile
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Not authenticated
+ *       500:
+ *         description: Server error
+ */
 router.get("/me", protect, async (req, res) => {
     try {
-        const userId = getUserId(req);
+        const userId = req.user?.id;
         if (!userId) {
-            res.status(401).json({ error: "User not authenticated" });
+            sendError(res, "User not authenticated", 401);
             return;
         }
         const user = await authService.getUserById(userId);
         if (!user) {
-            res.status(404).json({ error: "User not found" });
+            sendError(res, "User not found", 404);
             return;
         }
-        res.json({
-            success: true,
-            data: user,
-        });
+        sendSuccess(res, user, "User profile fetched successfully");
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Failed to get profile";
-        res.status(500).json({ error: errorMessage });
+        sendError(res, error, 500);
     }
 });
 /**

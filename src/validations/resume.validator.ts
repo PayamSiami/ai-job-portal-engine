@@ -28,7 +28,7 @@ export const createResumeValidation = [
   body("personalInfo")
     .optional()
     .isObject()
-    .withMessage("Personal info must be an object"),
+    .withMessage("Personal info must be an object"), 
   
   body("experience")
     .optional()

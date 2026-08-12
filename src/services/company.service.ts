@@ -2,9 +2,7 @@
 import { Company, ICompany, CompanyStatus } from "../models/Company.models";
 import Job, { IJob } from "../models/Job.models";
 import Application from "../models/Application.model";
-import User from "../models/User.models";
 import { AppError } from "../utils/errorHandler";
-import { ObjectId } from "mongoose";
 import Resume from "../models/Resume.models";
 
 export interface CreateCompanyDto {
@@ -48,18 +46,6 @@ class CompanyService {
     userId: string,
     data: CreateCompanyDto,
   ): Promise<ICompany> {
-    // Check if user exists
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    // Check if user already has a company
-    const existingCompany = await Company.findOne({ ownerId: userId });
-    if (existingCompany) {
-      throw new Error("User already has a company");
-    }
-
     // Check if company name is taken
     const nameExists = await Company.findOne({ name: data.name });
     if (nameExists) {
@@ -445,4 +431,4 @@ class CompanyService {
   }
 }
 
-export default new CompanyService;
+export default new CompanyService();

@@ -46,6 +46,6 @@ router.post(
   upload.single("logo"),
   companyController.uploadLogo,
 );
-router.delete("/company", protect, companyController.deleteCompany);
+router.delete("/", protect, companyController.deleteCompany);
 
 export default router;

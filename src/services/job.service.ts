@@ -1302,10 +1302,24 @@ class JobService {
       // Calculate date range
       const dateRange = this.getDateRange(timeRange);
 
+      // Build applicationsByJob (sorted by application count) — originally
+      // returned by getJobStats / getJobPerformance, now consolidated here.
+      const applicationsByJob = jobs.map((job: any) => {
+        const count = applications.filter(
+          (app: any) => app.jobId && app.jobId.toString() === job._id.toString(),
+        ).length;
+        return {
+          jobId: job._id,
+          title: job.title,
+          applications: count,
+        };
+      });
+
       // Calculate statistics
       const stats = {
         total: jobs.length,
         activeJobs: jobs.filter((j: any) => j.isActive === true).length,
+        inactiveJobs: jobs.filter((j: any) => j.isActive !== true).length,
         byStatus: this.getStatusDistribution(jobs),
         byType: this.getTypeDistribution(jobs),
         byWorkMode: this.getWorkModeDistribution(jobs),
@@ -1317,12 +1331,18 @@ class JobService {
               : 0,
           growth: this.calculateGrowth(applications, dateRange),
           byStatus: this.getApplicationStatusDistribution(applications),
+          byJob: applicationsByJob.sort(
+            (a: any, b: any) => b.applications - a.applications,
+          ),
         },
         performance: {
           conversionRate: this.calculateConversionRate(applications),
           timeToHire: this.calculateTimeToHire(applications),
           viewsPerJob: this.calculateViewsPerJob(jobs),
           shortlistRate: this.calculateShortlistRate(applications),
+          applicationsPerJob:
+            jobs.length > 0 ? applications.length / jobs.length : 0,
+          averageTimeToFill: this.calculateTimeToHire(applications),
         },
         monthlyData: this.getMonthlyData(jobs, applications, dateRange),
         topPerformingJobs: this.getTopPerformingJobs(jobs, applications),
@@ -1339,6 +1359,8 @@ class JobService {
   private getEmptyAnalytics() {
     return {
       total: 0,
+      activeJobs: 0,
+      inactiveJobs: 0,
       byStatus: {
         draft: 0,
         open: 0,
@@ -1358,12 +1380,15 @@ class JobService {
         total: 0,
         avgPerJob: 0,
         growth: 0,
+        byJob: [],
       },
       performance: {
         conversionRate: 0,
         timeToHire: 0,
         viewsPerJob: 0,
         shortlistRate: 0,
+        applicationsPerJob: 0,
+        averageTimeToFill: 0,
       },
       monthlyData: [],
       topPerformingJobs: [],

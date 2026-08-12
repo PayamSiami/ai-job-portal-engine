@@ -30,32 +30,10 @@ router.get("/featured", jobController.getFeaturedJobs);
  * @swagger
  * /api/jobs/stats:
  *   get:
- *     summary: Get stats jobs
- *     tags: [Jobs]
- */
-router.get("/stats", protect, jobController.getJobStats);
-
-// routes/job.routes.ts
-
-/**
- * @swagger
- * /api/jobs/stats/global:
- *   get:
- *     summary: Get global job statistics
+ *     summary: Get job statistics (platform-wide)
  *     tags: [Jobs, Statistics]
- *     security:
- *       - bearerAuth: []
  */
-router.get("/stats/global", jobController.getGlobalJobStats);
-
-/**
- * @swagger
- * /api/jobs/performance:
- *   get:
- *     summary: Get performance jobs
- *     tags: [Jobs]
- */
-router.get("/performance", protect, jobController.getJobPerformance);
+router.get("/stats", jobController.getGlobalJobStats);
 
 /**
  * @swagger
@@ -63,6 +41,8 @@ router.get("/performance", protect, jobController.getJobPerformance);
  *   get:
  *     summary: Get jobs by employer
  *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
  */
 router.get("/employer", protect, jobController.getJobsByEmployer);
 
@@ -70,10 +50,17 @@ router.get("/employer", protect, jobController.getJobsByEmployer);
  * @swagger
  * /api/jobs/analytics:
  *   get:
- *     summary: Get job analytics (employer only)
+ *     summary: Get job analytics, performance & stats (employer only)
  *     tags: [Jobs, Analytics]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: timeRange
+ *         schema:
+ *           type: string
+ *           default: 30d
+ *           enum: [7d, 30d, 90d]
  */
 router.get(
   "/analytics",

@@ -1,6 +1,7 @@
 import { catchAsync } from "../utils/catchAsync.js";
 import { AppError } from "../utils/errorHandler.js";
 import companyService from "../services/company.service.js";
+import { sendSuccess } from "../utils/responseFormatter.js";
 export class CompanyController {
     createCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -17,11 +18,7 @@ export class CompanyController {
             throw new AppError("You already have a company registered", 400);
         }
         const company = await companyService.createCompany(userId, data);
-        res.status(201).json({
-            success: true,
-            message: "Company created successfully",
-            data: company,
-        });
+        sendSuccess(res, company, "Company created successfully", 201);
     });
     getCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -32,10 +29,7 @@ export class CompanyController {
         if (!company) {
             throw new AppError("Company not found", 404);
         }
-        res.status(200).json({
-            success: true,
-            data: company,
-        });
+        sendSuccess(res, company, "Company fetched successfully");
     });
     checkCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -43,10 +37,7 @@ export class CompanyController {
             throw new Error("User not found");
         }
         const hasCompany = await companyService.hasCompany(userId);
-        res.status(200).json({
-            success: true,
-            data: { hasCompany },
-        });
+        sendSuccess(res, { hasCompany }, "Company check completed");
     });
     updateCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -59,11 +50,7 @@ export class CompanyController {
             throw new AppError("Company not found", 404);
         }
         const updated = await companyService.updateCompany(userId, company._id.toString(), data);
-        res.status(200).json({
-            success: true,
-            message: "Company updated successfully",
-            data: updated,
-        });
+        sendSuccess(res, updated, "Company updated successfully");
     });
     deleteCompany = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -75,10 +62,7 @@ export class CompanyController {
             throw new AppError("Company not found", 404);
         }
         await companyService.deleteCompany(userId, company._id.toString());
-        res.status(200).json({
-            success: true,
-            message: "Company deleted successfully",
-        });
+        sendSuccess(res, null, "Company deleted successfully");
     });
     uploadLogo = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -89,11 +73,7 @@ export class CompanyController {
             throw new Error("User not found");
         }
         const logoUrl = await companyService.uploadLogo(userId, req.file);
-        res.status(200).json({
-            success: true,
-            message: "Logo uploaded successfully",
-            data: { logoUrl },
-        });
+        sendSuccess(res, { logoUrl }, "Logo uploaded successfully");
     });
     getCompanyStats = catchAsync(async (req, res) => {
         const userId = req.user?.id;
@@ -101,9 +81,6 @@ export class CompanyController {
             throw new Error("User not found");
         }
         const stats = await companyService.getCompanyStats(userId);
-        res.status(200).json({
-            success: true,
-            data: stats,
-        });
+        sendSuccess(res, stats, "Company stats fetched successfully");
     });
 }

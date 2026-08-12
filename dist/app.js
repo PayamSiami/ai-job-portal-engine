@@ -10,6 +10,7 @@ import healthService from "./services/health.service.js";
 import logger from "./utils/logger.js";
 import { AppError, errorHandler } from "./utils/errorHandler.js";
 import { connectDB } from "./utils/database.js";
+import { sendSuccess, sendError } from "./utils/responseFormatter.js";
 const app = express();
 // ============ Parse CORS Origins ============
 const parseCorsOrigins = (originString) => {
@@ -42,7 +43,9 @@ const apiLimiter = rateLimit({
     max: config.RATE_LIMIT_MAX,
     message: { error: "Too many requests from this IP, please try again later." },
 });
-app.use("/api/", apiLimiter);
+if (config.NODE_ENV === "production") {
+    app.use("/api/", apiLimiter);
+}
 // ============ Swagger Documentation ============
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     explorer: true,
@@ -66,16 +69,15 @@ app.use("/api/users", userRoutes);
 app.use("/api/candidates", candidateRoutes);
 app.use("/api/activities", activityRoutes);
 app.use("/api/company", companyRoutes);
-app.use("/api", dashboardRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 // Health check endpoints
 app.get("/health", async (req, res) => {
     try {
         const health = await healthService.checkLiveness();
-        res.json(health);
+        sendSuccess(res, health, "Service is alive");
     }
     catch (error) {
-        res.status(503).json({
-            status: "error",
+        sendError(res, "Health check failed", 503, {
             timestamp: new Date().toISOString(),
         });
     }
@@ -89,14 +91,15 @@ app.get("/health/detailed", async (req, res) => {
             : health.status === "degraded"
                 ? 200
                 : 503;
-        res.status(statusCode).json(health);
+        if (statusCode >= 400) {
+            sendError(res, health, statusCode);
+        }
+        else {
+            sendSuccess(res, health, "Health check completed");
+        }
     }
     catch (error) {
-        res.status(503).json({
-            status: "unhealthy",
-            timestamp: new Date().toISOString(),
-            error: error instanceof Error ? error.message : "Unknown error",
-        });
+        sendError(res, error instanceof Error ? error.message : "Unknown error", 503, { timestamp: new Date().toISOString() });
     }
 });
 // Readiness probe
@@ -104,14 +107,15 @@ app.get("/health/ready", async (req, res) => {
     try {
         const readiness = await healthService.checkReadiness();
         const statusCode = readiness.status === "ready" ? 200 : 503;
-        res.status(statusCode).json(readiness);
+        if (statusCode >= 400) {
+            sendError(res, readiness, statusCode);
+        }
+        else {
+            sendSuccess(res, readiness, "Service is ready");
+        }
     }
     catch (error) {
-        res.status(503).json({
-            status: "not ready",
-            checks: {},
-            error: error instanceof Error ? error.message : "Unknown error",
-        });
+        sendError(res, error instanceof Error ? error.message : "Unknown error", 503, { timestamp: new Date().toISOString() });
     }
 });
 // 404 handler — delegate to the shared error handler for consistent response shape

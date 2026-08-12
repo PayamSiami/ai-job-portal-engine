@@ -1,9 +1,9 @@
-// src/controllers/googleAuth.controller.ts
 import { Request, Response } from "express";
 import { catchAsync } from "../utils/catchAsync";
 import { AppError } from "../utils/errorHandler";
 import googleAuthService from "../services/googleAuth.service";
 import { UserRole } from "../models/User.models";
+import { sendSuccess } from "../utils/responseFormatter";
 
 export class GoogleAuthController {
   /**
@@ -24,11 +24,7 @@ export class GoogleAuthController {
 
     const result = await googleAuthService.authenticate(idToken, userRole);
 
-    res.status(200).json({
-      success: true,
-      data: result,
-      message: "Google authentication successful",
-    });
+    sendSuccess(res, result, "Google authentication successful");
   });
 
   /**
@@ -59,19 +55,7 @@ export class GoogleAuthController {
     // Update current user with Google data
     const user = await googleAuthService.linkGoogleToUser(userId, googleData);
 
-    res.status(200).json({
-      success: true,
-      data: {
-        user: {
-          _id: user._id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          authProvider: user.authProvider,
-        },
-      },
-      message: "Google account linked successfully",
-    });
+    sendSuccess(res, { user }, "Google account linked successfully");
   });
 
   /**
@@ -91,19 +75,7 @@ export class GoogleAuthController {
       throw new AppError("User not found", 404);
     }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        user: {
-          _id: user._id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          authProvider: user.authProvider,
-        },
-      },
-      message: "Google account unlinked successfully",
-    });
+    sendSuccess(res, { user }, "Google account unlinked successfully");
   });
 }
 

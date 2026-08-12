@@ -15,7 +15,7 @@ router.get("/ai-screening", protect, dashboardController.getAIScreeningData);
 
 // Analytics
 router.get(
-  "/analytics/export",
+  "/export",
   protect,
   dashboardController.exportDashboard,
 );

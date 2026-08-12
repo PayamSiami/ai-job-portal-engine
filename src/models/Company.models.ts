@@ -60,7 +60,6 @@ export enum SocialPlatform {
   INSTAGRAM = "instagram",
   YOUTUBE = "youtube",
   GITHUB = "github",
-  WEBSITE = "website",
 }
 
 // ==================== Interfaces ====================

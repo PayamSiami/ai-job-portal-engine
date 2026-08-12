@@ -1,5 +1,6 @@
 import { body, validationResult } from "express-validator";
 import { AppError } from "../utils/errorHandler.js";
+import { sendError } from "../utils/responseFormatter.js";
 // Validation for registration
 export const validateRegistration = [
     body("username")
@@ -16,7 +17,8 @@ export const validateRegistration = [
     (req, res, next) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            res.status(400).json({ errors: errors.array() });
+            const errorMessages = errors.array().map((err) => err.msg);
+            sendError(res, errorMessages.join(", "), 400);
             return;
         }
         next();
@@ -29,7 +31,8 @@ export const validateLogin = [
     (req, res, next) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            res.status(400).json({ errors: errors.array() });
+            const errorMessages = errors.array().map((err) => err.msg);
+            sendError(res, errorMessages.join(", "), 400);
             return;
         }
         next();

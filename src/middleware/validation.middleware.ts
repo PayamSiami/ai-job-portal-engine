@@ -1,7 +1,7 @@
-// src/middleware/validationMiddleware.ts
 import { Request, Response, NextFunction } from "express";
 import { body, ValidationChain, validationResult } from "express-validator";
 import { AppError } from "../utils/errorHandler";
+import { sendError } from "../utils/responseFormatter";
 
 // Validation for registration
 export const validateRegistration = [
@@ -23,7 +23,8 @@ export const validateRegistration = [
   (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ errors: errors.array() });
+      const errorMessages = errors.array().map((err) => err.msg);
+      sendError(res, errorMessages.join(", "), 400);
       return;
     }
     next();
@@ -39,7 +40,8 @@ export const validateLogin = [
   (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ errors: errors.array() });
+      const errorMessages = errors.array().map((err) => err.msg);
+      sendError(res, errorMessages.join(", "), 400);
       return;
     }
     next();

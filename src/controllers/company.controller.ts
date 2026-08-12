@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { catchAsync } from "../utils/catchAsync";
 import { AppError } from "../utils/errorHandler";
 import companyService from "../services/company.service";
+import { sendSuccess } from "../utils/responseFormatter";
 
 export class CompanyController {
   createCompany = catchAsync(async (req: Request, res: Response) => {
@@ -25,11 +26,7 @@ export class CompanyController {
 
     const company = await companyService.createCompany(userId, data);
 
-    res.status(201).json({
-      success: true,
-      message: "Company created successfully",
-      data: company,
-    });
+    sendSuccess(res, company, "Company created successfully", 201);
   });
 
   getCompany = catchAsync(async (req: Request, res: Response) => {
@@ -45,10 +42,7 @@ export class CompanyController {
       throw new AppError("Company not found", 404);
     }
 
-    res.status(200).json({
-      success: true,
-      data: company,
-    });
+    sendSuccess(res, company, "Company fetched successfully");
   });
 
   checkCompany = catchAsync(async (req: Request, res: Response) => {
@@ -60,10 +54,7 @@ export class CompanyController {
 
     const hasCompany = await companyService.hasCompany(userId);
 
-    res.status(200).json({
-      success: true,
-      data: { hasCompany },
-    });
+    sendSuccess(res, { hasCompany }, "Company check completed");
   });
 
   updateCompany = catchAsync(async (req: Request, res: Response) => {
@@ -85,11 +76,7 @@ export class CompanyController {
       data,
     );
 
-    res.status(200).json({
-      success: true,
-      message: "Company updated successfully",
-      data: updated,
-    });
+    sendSuccess(res, updated, "Company updated successfully");
   });
 
   deleteCompany = catchAsync(async (req: Request, res: Response) => {
@@ -106,10 +93,7 @@ export class CompanyController {
 
     await companyService.deleteCompany(userId, company._id.toString());
 
-    res.status(200).json({
-      success: true,
-      message: "Company deleted successfully",
-    });
+    sendSuccess(res, null, "Company deleted successfully");
   });
 
   uploadLogo = catchAsync(async (req: Request, res: Response) => {
@@ -125,11 +109,7 @@ export class CompanyController {
 
     const logoUrl = await companyService.uploadLogo(userId, req.file);
 
-    res.status(200).json({
-      success: true,
-      message: "Logo uploaded successfully",
-      data: { logoUrl },
-    });
+    sendSuccess(res, { logoUrl }, "Logo uploaded successfully");
   });
 
   getCompanyStats = catchAsync(async (req: Request, res: Response) => {
@@ -141,9 +121,6 @@ export class CompanyController {
 
     const stats = await companyService.getCompanyStats(userId);
 
-    res.status(200).json({
-      success: true,
-      data: stats,
-    });
+    sendSuccess(res, stats, "Company stats fetched successfully");
   });
 }

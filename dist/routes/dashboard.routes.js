@@ -10,5 +10,5 @@ const router = Router();
 router.get("/stats", protect, dashboardController.getDashboardStats);
 router.get("/ai-screening", protect, dashboardController.getAIScreeningData);
 // Analytics
-router.get("/analytics/export", protect, dashboardController.exportDashboard);
+router.get("/export", protect, dashboardController.exportDashboard);
 export default router;

@@ -2,6 +2,7 @@ import { catchAsync } from "../utils/catchAsync.js";
 import { AppError } from "../utils/errorHandler.js";
 import googleAuthService from "../services/googleAuth.service.js";
 import { UserRole } from "../models/User.models.js";
+import { sendSuccess } from "../utils/responseFormatter.js";
 export class GoogleAuthController {
     /**
      * Handle Google OAuth login/signup
@@ -17,11 +18,7 @@ export class GoogleAuthController {
             ? role
             : UserRole.JOB_SEEKER;
         const result = await googleAuthService.authenticate(idToken, userRole);
-        res.status(200).json({
-            success: true,
-            data: result,
-            message: "Google authentication successful",
-        });
+        sendSuccess(res, result, "Google authentication successful");
     });
     /**
      * Link Google account to existing user
@@ -45,19 +42,7 @@ export class GoogleAuthController {
         }
         // Update current user with Google data
         const user = await googleAuthService.linkGoogleToUser(userId, googleData);
-        res.status(200).json({
-            success: true,
-            data: {
-                user: {
-                    _id: user._id,
-                    username: user.username,
-                    email: user.email,
-                    role: user.role,
-                    authProvider: user.authProvider,
-                },
-            },
-            message: "Google account linked successfully",
-        });
+        sendSuccess(res, { user }, "Google account linked successfully");
     });
     /**
      * Unlink Google account from user
@@ -72,19 +57,7 @@ export class GoogleAuthController {
         if (!user) {
             throw new AppError("User not found", 404);
         }
-        res.status(200).json({
-            success: true,
-            data: {
-                user: {
-                    _id: user._id,
-                    username: user.username,
-                    email: user.email,
-                    role: user.role,
-                    authProvider: user.authProvider,
-                },
-            },
-            message: "Google account unlinked successfully",
-        });
+        sendSuccess(res, { user }, "Google account unlinked successfully");
     });
 }
 export default new GoogleAuthController();

@@ -34,5 +34,5 @@ router.get("/", companyController.getCompany);
 router.get("/check", companyController.checkCompany);
 router.put("/", authorize("employer"), companyController.updateCompany);
 router.post("/upload-logo", upload.single("logo"), companyController.uploadLogo);
-router.delete("/company", protect, companyController.deleteCompany);
+router.delete("/", protect, companyController.deleteCompany);
 export default router;

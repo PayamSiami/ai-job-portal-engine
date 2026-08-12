@@ -56,7 +56,7 @@ class JobController {
   // ============================================================
 
   /**
-   * Get job analytics for employer
+   * Get job analytics for employer (merged from /stats, /performance, /analytics)
    * GET /api/jobs/analytics
    */
   getJobAnalytics = asyncHandler(
@@ -79,30 +79,11 @@ class JobController {
   );
 
   /**
-   * Get job statistics for employer
-   * GET /api/jobs/stats
-   */
-  getJobStats = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
-      const userId = getUserId(req);
-
-      if (!userId) {
-        throw new AppError("User not authenticated", 401);
-      }
-
-      const stats = await jobService.getJobStats(userId);
-
-      sendSuccess(res, stats, "Job stats fetched successfully");
-    },
-  );
-
-  /**
-   * Get job statistics for employer
-   * GET /api/jobs/stats
+   * Get global job statistics (platform-wide, public)
+   * GET /api/jobs/stats/global
    */
   getGlobalJobStats = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      
       const stats = await jobService.getGlobalJobStats();
 
       sendSuccess(res, stats, "Job stats fetched successfully");
@@ -274,7 +255,7 @@ class JobController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { page = 1, limit = 10 } = req.query;
+      const { page = 0, limit = 10 } = req.query;
 
       const result = await jobService.getJobsByEmployer(userId, {
         page: Number(page),
@@ -406,25 +387,7 @@ class JobController {
     },
   );
 
-  /**
-   * Get job performance metrics
-   * GET /api/dashboard/performance
-   */
-  getJobPerformance = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
-      const userId = getUserId(req);
-
-      if (!userId) {
-        throw new AppError("User not authenticated", 401);
-      }
-
-      const timeframe = req.query.timeframe ? Number(req.query.timeframe) : 30;
-
-      const performance = await jobService.getJobPerformance(userId, timeframe);
-
-      sendSuccess(res, performance, "Job performance fetched successfully");
-    },
-  );
 }
+
 
 export default new JobController();

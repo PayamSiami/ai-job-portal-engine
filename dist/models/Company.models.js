@@ -59,7 +59,6 @@ export var SocialPlatform;
     SocialPlatform["INSTAGRAM"] = "instagram";
     SocialPlatform["YOUTUBE"] = "youtube";
     SocialPlatform["GITHUB"] = "github";
-    SocialPlatform["WEBSITE"] = "website";
 })(SocialPlatform || (SocialPlatform = {}));
 // ==================== Schema ====================
 const SocialLinkSchema = new Schema({
