@@ -18,6 +18,7 @@ import {
   jobMatchesValidation,
   improvementSuggestionsValidation,
   bulkDeleteValidation,
+  resumeValidations,
 } from "../validations/resume.validator";
 
 const router = Router();
@@ -158,6 +159,36 @@ router.put(
   protect,
   validate(setDefaultResumeValidation),
   resumeController.setDefaultResume,
+);
+
+/**
+ * @swagger
+ * /api/resumes/:id/status:
+ *   patch:
+ *     summary: Update single resume status
+ *     tags: [Resumes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [draft, active, archived]
+ *               note:
+ *                 type: string
+ */
+router.patch(
+  "/:id/status",
+  protect,
+  validate(resumeValidations.updateStatus),
+  resumeController.updateResumeStatus,
 );
 
 /**

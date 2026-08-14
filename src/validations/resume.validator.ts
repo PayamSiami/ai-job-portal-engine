@@ -9,56 +9,62 @@ export const createResumeValidation = [
     .withMessage("Title is required")
     .isLength({ max: 100 })
     .withMessage("Title must be less than 100 characters"),
-  
+
   body("template")
     .optional()
     .isIn(["modern", "classic", "minimal", "creative"])
-    .withMessage("Invalid template type. Must be one of: modern, classic, minimal, creative"),
-  
+    .withMessage(
+      "Invalid template type. Must be one of: modern, classic, minimal, creative",
+    ),
+
   body("visibility")
     .optional()
     .isIn(["private", "public", "shared"])
-    .withMessage("Invalid visibility option. Must be one of: private, public, shared"),
-  
+    .withMessage(
+      "Invalid visibility option. Must be one of: private, public, shared",
+    ),
+
   body("isDefault")
     .optional()
     .isBoolean()
     .withMessage("isDefault must be a boolean"),
-  
+
   body("personalInfo")
     .optional()
     .isObject()
-    .withMessage("Personal info must be an object"), 
-  
+    .withMessage("Personal info must be an object"),
+
   body("experience")
     .optional()
     .isArray()
     .withMessage("Experience must be an array"),
-  
+
   body("education")
     .optional()
     .isArray()
     .withMessage("Education must be an array"),
-  
-  body("skills")
-    .optional()
-    .isArray()
-    .withMessage("Skills must be an array"),
-  
+
+  body("skills").optional().isArray().withMessage("Skills must be an array"),
+
   body("certifications")
     .optional()
     .isArray()
     .withMessage("Certifications must be an array"),
-  
+
   body("languages")
     .optional()
     .isArray()
     .withMessage("Languages must be an array"),
-  
+
   body("projects")
     .optional()
     .isArray()
     .withMessage("Projects must be an array"),
+
+  body("generatePDF")
+    .optional()
+    .isBoolean()
+    .withMessage("generatePDF must be a boolean"),
 ];
 
 /**
@@ -70,27 +76,27 @@ export const updateResumeValidation = [
     .withMessage("Resume ID is required")
     .isMongoId()
     .withMessage("Invalid resume ID format"),
-  
+
   body("title")
     .optional()
     .isLength({ max: 100 })
     .withMessage("Title must be less than 100 characters"),
-  
+
   body("status")
     .optional()
     .isIn(["draft", "active", "archived"])
     .withMessage("Invalid status. Must be one of: draft, active, archived"),
-  
+
   body("template")
     .optional()
     .isIn(["modern", "classic", "minimal", "creative"])
     .withMessage("Invalid template type"),
-  
+
   body("visibility")
     .optional()
     .isIn(["private", "public", "shared"])
     .withMessage("Invalid visibility option"),
-  
+
   body("isDefault")
     .optional()
     .isBoolean()
@@ -161,7 +167,7 @@ export const exportResumeValidation = [
     .withMessage("Resume ID is required")
     .isMongoId()
     .withMessage("Invalid resume ID format"),
-  
+
   query("format")
     .optional()
     .isIn(["json", "pdf"])
@@ -181,16 +187,10 @@ export const analyzeResumeValidation = [
     .withMessage("Resume ID is required")
     .isMongoId()
     .withMessage("Invalid resume ID format"),
-  
-  query("jobId")
-    .optional()
-    .isMongoId()
-    .withMessage("Invalid job ID format"),
-  
-  body("jobId")
-    .optional()
-    .isMongoId()
-    .withMessage("Invalid job ID format"),
+
+  query("jobId").optional().isMongoId().withMessage("Invalid job ID format"),
+
+  body("jobId").optional().isMongoId().withMessage("Invalid job ID format"),
 ];
 
 /**
@@ -202,28 +202,30 @@ export const generateCoverLetterValidation = [
     .withMessage("Resume ID is required")
     .isMongoId()
     .withMessage("Invalid resume ID format"),
-  
+
   body("jobId")
     .notEmpty()
     .withMessage("Job ID is required")
     .isMongoId()
     .withMessage("Invalid job ID format"),
-  
+
   body("tone")
     .optional()
     .isIn(["professional", "enthusiastic", "confident", "creative"])
-    .withMessage("Invalid tone option. Must be one of: professional, enthusiastic, confident, creative"),
-  
+    .withMessage(
+      "Invalid tone option. Must be one of: professional, enthusiastic, confident, creative",
+    ),
+
   body("length")
     .optional()
     .isIn(["short", "medium", "long"])
     .withMessage("Invalid length option. Must be one of: short, medium, long"),
-  
+
   body("includeContactInfo")
     .optional()
     .isBoolean()
     .withMessage("includeContactInfo must be a boolean"),
-  
+
   body("highlightSkills")
     .optional()
     .isBoolean()
@@ -239,11 +241,8 @@ export const careerFeedbackValidation = [
     .withMessage("Resume ID is required")
     .isMongoId()
     .withMessage("Invalid resume ID format"),
-  
-  query("focus")
-    .optional()
-    .isString()
-    .withMessage("Focus must be a string"),
+
+  query("focus").optional().isString().withMessage("Focus must be a string"),
 ];
 
 /**
@@ -255,12 +254,12 @@ export const jobMatchesValidation = [
     .withMessage("Resume ID is required")
     .isMongoId()
     .withMessage("Invalid resume ID format"),
-  
+
   query("limit")
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage("Limit must be between 1 and 100"),
-  
+
   query("minMatchScore")
     .optional()
     .isInt({ min: 0, max: 100 })
@@ -284,11 +283,37 @@ export const improvementSuggestionsValidation = [
 export const bulkDeleteValidation = [
   body("resumeIds")
     .isArray({ min: 1, max: 50 })
-    .withMessage("resumeIds must be an array with at least 1 and at most 50 items"),
-  
+    .withMessage(
+      "resumeIds must be an array with at least 1 and at most 50 items",
+    ),
+
   body("resumeIds.*")
     .isMongoId()
     .withMessage("Each resume ID must be a valid MongoDB ID"),
+];
+
+/**
+ * Validation for updating resume status
+ */
+export const updateResumeStatusValidation = [
+  param("id")
+    .notEmpty()
+    .withMessage("Resume ID is required")
+    .isMongoId()
+    .withMessage("Invalid resume ID format"),
+
+  body("status")
+    .notEmpty()
+    .withMessage("Status is required")
+    .isIn(["draft", "active", "archived"])
+    .withMessage("Status must be one of: draft, active, archived"),
+
+  body("note")
+    .optional()
+    .isString()
+    .withMessage("Note must be a string")
+    .isLength({ max: 500 })
+    .withMessage("Note cannot exceed 500 characters"),
 ];
 
 // ============================================
@@ -310,4 +335,5 @@ export const resumeValidations = {
   jobMatches: jobMatchesValidation,
   improvements: improvementSuggestionsValidation,
   bulkDelete: bulkDeleteValidation,
+  updateStatus: updateResumeStatusValidation,
 };

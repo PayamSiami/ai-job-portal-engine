@@ -3,76 +3,10 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import logger from "../utils/logger";
+import { ResumeData } from "../types/pdf.types";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-export interface ResumeData {
-  id?: string;
-  title: string;
-  personalInfo: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    location?: string;
-    website?: string;
-    linkedin?: string;
-    github?: string;
-    summary?: string;
-    title?: string;
-  };
-  experience: Array<{
-    company: string;
-    position: string;
-    location?: string;
-    startDate: Date | string;
-    endDate?: Date | string;
-    current: boolean;
-    description?: string;
-    achievements?: string[];
-  }>;
-  education: Array<{
-    institution: string;
-    degree: string;
-    fieldOfStudy?: string;
-    location?: string;
-    startDate: Date | string;
-    endDate?: Date | string;
-    current: boolean;
-    description?: string;
-    gpa?: number;
-  }>;
-  skills: Array<{
-    name: string;
-    level?: "beginner" | "intermediate" | "advanced" | "expert";
-    category?: string;
-  }>;
-  certifications: Array<{
-    name: string;
-    issuer: string;
-    date: Date | string;
-    expiryDate?: Date | string;
-    credentialId?: string;
-    url?: string;
-  }>;
-  languages: Array<{
-    name: string;
-    proficiency: "basic" | "conversational" | "professional" | "native";
-  }>;
-  projects: Array<{
-    name: string;
-    description?: string;
-    url?: string;
-    technologies?: string[];
-    startDate?: Date | string;
-    endDate?: Date | string;
-  }>;
-  template: "modern" | "classic" | "minimal" | "creative";
-  visibility?: string;
-  status?: string;
-  isDefault?: boolean;
-}
 
 interface SaveResult {
   filename: string;
@@ -200,12 +134,16 @@ class PDFService {
   ): Promise<Buffer> {
     try {
       // Convert to ResumeData if it's a database object
-      const resumeData = resume._id || resume.id
-        ? this.convertToResumeData(resume)
-        : (resume as ResumeData);
+      const resumeData =
+        resume._id || resume.id
+          ? this.convertToResumeData(resume)
+          : (resume as ResumeData);
 
       // Validate required data
-      if (!resumeData.personalInfo?.firstName || !resumeData.personalInfo?.lastName) {
+      if (
+        !resumeData.personalInfo?.firstName ||
+        !resumeData.personalInfo?.lastName
+      ) {
         throw new Error("Resume must have at least first name and last name");
       }
 
@@ -253,10 +191,15 @@ class PDFService {
               .fillColor(this.colors.textMuted)
               .fontSize(8)
               .font("Helvetica")
-              .text(`Page ${i + 1} of ${pages.count}`, 50, doc.page.height - 30, {
-                align: "center",
-                width: doc.page.width - 100,
-              });
+              .text(
+                `Page ${i + 1} of ${pages.count}`,
+                50,
+                doc.page.height - 30,
+                {
+                  align: "center",
+                  width: doc.page.width - 100,
+                },
+              );
           }
 
           doc.end();
@@ -418,7 +361,10 @@ class PDFService {
   /**
    * Get PDF as base64 string
    */
-  async getPDFAsBase64(resume: any, template: string = "modern"): Promise<string> {
+  async getPDFAsBase64(
+    resume: any,
+    template: string = "modern",
+  ): Promise<string> {
     const buffer = await this.generateResumePDF(resume, template);
     return buffer.toString("base64");
   }
@@ -681,7 +627,11 @@ class PDFService {
           .fillColor(this.colors.textLight)
           .fontSize(7)
           .font("Helvetica")
-          .text(`(${this.getProficiencyLabel(lang.proficiency)})`, leftCol + 10, leftY);
+          .text(
+            `(${this.getProficiencyLabel(lang.proficiency)})`,
+            leftCol + 10,
+            leftY,
+          );
         leftY += 16;
       });
 

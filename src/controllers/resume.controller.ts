@@ -19,6 +19,7 @@ import { asyncHandler } from "./base.controller";
 import jobService from "../services/job.service";
 import { buildResumeContent } from "../utils/buildResumeContent";
 import { getCompanyNameFromJob } from "../utils/companyHelper";
+import path from "path";
 
 /**
  * Resume Controller
@@ -51,6 +52,63 @@ class ResumeController {
           pagination: result.pagination,
         },
         "Resumes fetched successfully",
+      );
+    },
+  );
+
+  /**
+   * Update resume status
+   * PATCH /api/resumes/:id/status
+   */
+  updateResumeStatus = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const userId = getUserId(req);
+
+      if (!userId) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const resumeId = getStringParam(req.params.id);
+
+      if (!resumeId) {
+        throw new AppError("Invalid resume ID", 400);
+      }
+
+      const { status } = req.body;
+
+      if (!status) {
+        throw new AppError("Status is required", 400);
+      }
+
+      // Validate status
+      const validStatuses = ["draft", "active", "archived"];
+      if (!validStatuses.includes(status)) {
+        throw new AppError(
+          `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+          400,
+        );
+      }
+
+      // Check if resume exists
+      const existingResume = await resumeService.getResume(resumeId, userId);
+      if (!existingResume) {
+        throw new AppError("Resume not found", 404);
+      }
+
+      const updatedResume = await resumeService.updateResumeStatus(
+        resumeId,
+        userId,
+        status,
+      );
+
+      sendSuccess(
+        res,
+        {
+          resume: updatedResume,
+          previousStatus: existingResume.status,
+          currentStatus: status,
+        },
+        `Resume status updated to "${status}" successfully`,
       );
     },
   );
@@ -101,7 +159,71 @@ class ResumeController {
 
       const resume = await resumeService.createResume(userId, resumeData);
 
-      sendSuccess(res, resume, "Resume created successfully", 201);
+      // Generate PDF if requested
+      if (resumeData.generatePDF) {
+        try {
+          const template = resumeData.template || resume.template || "modern";
+
+          // Generate and save PDF
+          const pdfResult = await pdfService.generateAndSavePDF(
+            resume,
+            template,
+          );
+
+          // Build public URL for the PDF
+          const protocol = req.protocol;
+          const host = req.get("host");
+          const baseUrl = `${protocol}://${host}`;
+
+          // Get the filename from the path
+          const filename = path.basename(pdfResult.path);
+
+          // Create public URL for static serving
+          const publicUrl = `${baseUrl}/uploads/resumes/${filename}`;
+
+          // Update resume with PDF file info
+          const updatedResume = await resumeService.updateResumePDF(
+            resume._id.toString(),
+            userId,
+            {
+              filename: pdfResult.filename,
+              path: publicUrl,
+              size: pdfResult.size,
+              mimeType: "application/pdf",
+              uploadedAt: new Date(),
+            },
+          );
+
+          // Return resume with PDF info including the URL
+          sendSuccess(
+            res,
+            {
+              resume: updatedResume,
+            },
+            "Resume created and PDF generated successfully",
+            201,
+          );
+        } catch (pdfError) {
+          logger.error("Failed to generate PDF during resume creation:", {
+            error:
+              pdfError instanceof Error ? pdfError.message : "Unknown error",
+            resumeId: resume._id,
+          });
+
+          // Return the resume without PDF but with a warning
+          sendSuccess(
+            res,
+            {
+              resume,
+              pdfError: "PDF generation failed but resume was saved",
+            },
+            "Resume created successfully (PDF generation failed)",
+            201,
+          );
+        }
+      } else {
+        sendSuccess(res, resume, "Resume created successfully", 201);
+      }
     },
   );
 
@@ -261,23 +383,38 @@ class ResumeController {
         throw new AppError("PDF file not found", 404);
       }
 
-      // Read and send file
-      const fileBuffer = fs.readFileSync(pdfPath);
+      // Get file stats
       const stats = fs.statSync(pdfPath);
 
       // Sanitize filename
-      const filename = `resume-${resume.title?.replace(/[^a-zA-Z0-9]/g, "-") || "untitled"}.pdf`;
+      const sanitizedTitle =
+        resume.title?.replace(/[^a-zA-Z0-9]/g, "-") || "untitled";
+      const filename = `resume-${sanitizedTitle}.pdf`;
 
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${filename}"`,
+      // Build public URL
+      const protocol = req.protocol;
+      const host = req.get("host");
+      const baseUrl = `${protocol}://${host}`;
+
+      // Return file path and URLs
+      sendSuccess(
+        res,
+        {
+          filename: filename,
+          fileSize: stats.size,
+          fileSizeFormatted: `${(stats.size / 1024).toFixed(2)} KB`,
+          mimeType: "application/pdf",
+          lastModified: stats.mtime,
+          fileUrl: `${baseUrl}/uploads/resumes/${path.basename(pdfPath)}`,
+        },
+        "PDF file path retrieved successfully",
       );
-      res.setHeader("Content-Length", stats.size);
 
-      res.send(fileBuffer);
-
-      logger.info("PDF downloaded successfully", { resumeId, userId });
+      logger.info("PDF file path retrieved", {
+        resumeId,
+        userId,
+        filePath: pdfPath,
+      });
     },
   );
 
