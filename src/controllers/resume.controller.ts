@@ -160,7 +160,7 @@ class ResumeController {
       const resume = await resumeService.createResume(userId, resumeData);
 
       // Generate PDF if requested
-      if (resumeData.generatePDF) {
+      if (!resumeData.generatePDF) {
         try {
           const template = resumeData.template || resume.template || "modern";
 
@@ -257,7 +257,88 @@ class ResumeController {
         updateData,
       );
 
-      sendSuccess(res, updatedResume, "Resume updated successfully");
+      // Check if PDF regeneration is requested
+      const regeneratePDF = updateData.generatePDF || false;
+      const template =
+        updateData.template || updatedResume.template || "modern";
+
+      if (!regeneratePDF) {
+        try {
+          // Generate and save PDF
+          const pdfResult = await pdfService.generateAndSavePDF(
+            updatedResume,
+            template,
+          );
+
+          // Build public URL for the PDF
+          const protocol = req.protocol;
+          const host = req.get("host");
+          const baseUrl = `${protocol}://${host}`;
+
+          // Get the filename from the path
+          const filename = path.basename(pdfResult.path);
+
+          // Create public URL for static serving
+          const publicUrl = `${baseUrl}/uploads/resumes/${filename}`;
+
+          // Update resume with PDF file info
+          const resumeWithPDF = await resumeService.updateResumePDF(
+            resumeId,
+            userId,
+            {
+              filename: pdfResult.filename,
+              path: publicUrl,
+              size: pdfResult.size,
+              mimeType: "application/pdf",
+              uploadedAt: new Date(),
+            },
+          );
+
+          // Return updated resume with PDF
+          sendSuccess(
+            res,
+            {
+              resume: resumeWithPDF,
+            },
+            "Resume updated and PDF regenerated successfully",
+          );
+        } catch (pdfError) {
+          logger.error("Failed to regenerate PDF during resume update:", {
+            error:
+              pdfError instanceof Error ? pdfError.message : "Unknown error",
+            resumeId: resumeId,
+            userId: userId,
+          });
+
+          // Return the resume without updated PDF but with a warning
+          sendSuccess(
+            res,
+            {
+              resume: updatedResume,
+              pdfWarning: "PDF regeneration failed but resume was updated",
+            },
+            "Resume updated successfully (PDF generation failed)",
+          );
+        }
+      } else {
+        // If not regenerating PDF, but the user changed template, they might want PDF
+        if (
+          updateData.template &&
+          updateData.template !== existingResume.template
+        ) {
+          sendSuccess(
+            res,
+            {
+              resume: updatedResume,
+              message:
+                "Template updated. To generate a new PDF, set regeneratePDF: true",
+            },
+            "Resume updated successfully",
+          );
+        } else {
+          sendSuccess(res, updatedResume, "Resume updated successfully");
+        }
+      }
     },
   );
 

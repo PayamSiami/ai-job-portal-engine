@@ -37,7 +37,7 @@ class PDFService {
   };
 
   constructor() {
-    this.fontsPath = path.join(__dirname, "../../src/assets/fonts");
+    this.fontsPath = path.join(process.cwd(), "src/assets/fonts");
     this.storagePath = path.join(process.cwd(), "uploads/resumes");
 
     // Create directories if they don't exist

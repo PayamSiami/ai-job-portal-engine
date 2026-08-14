@@ -51,10 +51,32 @@ app.use(
 );
 
 // Configure helmet to allow iframe embedding
+// Convert CORS origins to frame ancestors format
+const getFrameAncestors = (origins: string[]): string[] => {
+  // If it's "*", allow all origins (or use ['*'] based on your needs)
+  if (origins.includes("*")) {
+    return ["*"];
+  }
+
+  // Add "'self'" to allow same origin
+  return ["'self'", ...origins];
+};
+
 app.use(
   helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        frameAncestors: getFrameAncestors(corsOrigins),
+        // Add other necessary directives
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+      },
+    },
     frameguard: {
-      action: "sameorigin", // Allows iframes from same origin
+      action: "sameorigin",
     },
   }),
 );
@@ -90,7 +112,10 @@ try {
         if (filePath.endsWith(".pdf")) {
           res.setHeader("Content-Type", "application/pdf");
           // Allow inline display in iframe
-          res.setHeader("Content-Disposition", `inline; filename="${path.basename(filePath)}"`);
+          res.setHeader(
+            "Content-Disposition",
+            `inline; filename="${path.basename(filePath)}"`,
+          );
           // Remove X-Frame-Options for PDFs to allow embedding
           res.removeHeader("X-Frame-Options");
         }
