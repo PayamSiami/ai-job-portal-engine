@@ -3,7 +3,7 @@ import resumeController from "../controllers/resume.controller.js";
 import resumeAIController from "../controllers/resume.controller.js";
 import { protect, authorize } from "../middleware/authMiddleware.js";
 import { validate } from "../middleware/validation.middleware.js";
-import { createResumeValidation, updateResumeValidation, getResumeValidation, deleteResumeValidation, duplicateResumeValidation, setDefaultResumeValidation, downloadPDFValidation, exportResumeValidation, analyzeResumeValidation, generateCoverLetterValidation, careerFeedbackValidation, jobMatchesValidation, improvementSuggestionsValidation, bulkDeleteValidation, } from "../validations/resume.validator.js";
+import { createResumeValidation, updateResumeValidation, getResumeValidation, deleteResumeValidation, duplicateResumeValidation, setDefaultResumeValidation, downloadPDFValidation, exportResumeValidation, analyzeResumeValidation, generateCoverLetterValidation, careerFeedbackValidation, jobMatchesValidation, improvementSuggestionsValidation, bulkDeleteValidation, resumeValidations, } from "../validations/resume.validator.js";
 const router = Router();
 // ============================================================
 // RESUME CRUD OPERATIONS
@@ -98,6 +98,30 @@ router.post("/:id/duplicate", protect, validate(duplicateResumeValidation), resu
  *       - bearerAuth: []
  */
 router.put("/:id/default", protect, validate(setDefaultResumeValidation), resumeController.setDefaultResume);
+/**
+ * @swagger
+ * /api/resumes/:id/status:
+ *   patch:
+ *     summary: Update single resume status
+ *     tags: [Resumes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [draft, active, archived]
+ *               note:
+ *                 type: string
+ */
+router.patch("/:id/status", protect, validate(resumeValidations.updateStatus), resumeController.updateResumeStatus);
 /**
  * @swagger
  * /api/resumes/:id/pdf:

@@ -26,7 +26,7 @@ class PDFService {
         sidebarLighter: "#DDD6FE",
     };
     constructor() {
-        this.fontsPath = path.join(__dirname, "../../src/assets/fonts");
+        this.fontsPath = path.join(process.cwd(), "src/assets/fonts");
         this.storagePath = path.join(process.cwd(), "uploads/resumes");
         // Create directories if they don't exist
         [this.fontsPath, this.storagePath].forEach((dir) => {
@@ -120,7 +120,8 @@ class PDFService {
                 ? this.convertToResumeData(resume)
                 : resume;
             // Validate required data
-            if (!resumeData.personalInfo?.firstName || !resumeData.personalInfo?.lastName) {
+            if (!resumeData.personalInfo?.firstName ||
+                !resumeData.personalInfo?.lastName) {
                 throw new Error("Resume must have at least first name and last name");
             }
             return new Promise((resolve, reject) => {

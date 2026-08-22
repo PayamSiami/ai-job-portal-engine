@@ -32,10 +32,7 @@ export const createResumeValidation = [
         .optional()
         .isArray()
         .withMessage("Education must be an array"),
-    body("skills")
-        .optional()
-        .isArray()
-        .withMessage("Skills must be an array"),
+    body("skills").optional().isArray().withMessage("Skills must be an array"),
     body("certifications")
         .optional()
         .isArray()
@@ -48,6 +45,10 @@ export const createResumeValidation = [
         .optional()
         .isArray()
         .withMessage("Projects must be an array"),
+    body("generatePDF")
+        .optional()
+        .isBoolean()
+        .withMessage("generatePDF must be a boolean"),
 ];
 /**
  * Validation for updating a resume
@@ -155,14 +156,8 @@ export const analyzeResumeValidation = [
         .withMessage("Resume ID is required")
         .isMongoId()
         .withMessage("Invalid resume ID format"),
-    query("jobId")
-        .optional()
-        .isMongoId()
-        .withMessage("Invalid job ID format"),
-    body("jobId")
-        .optional()
-        .isMongoId()
-        .withMessage("Invalid job ID format"),
+    query("jobId").optional().isMongoId().withMessage("Invalid job ID format"),
+    body("jobId").optional().isMongoId().withMessage("Invalid job ID format"),
 ];
 /**
  * Validation for generating a cover letter
@@ -204,10 +199,7 @@ export const careerFeedbackValidation = [
         .withMessage("Resume ID is required")
         .isMongoId()
         .withMessage("Invalid resume ID format"),
-    query("focus")
-        .optional()
-        .isString()
-        .withMessage("Focus must be a string"),
+    query("focus").optional().isString().withMessage("Focus must be a string"),
 ];
 /**
  * Validation for getting job matches
@@ -248,6 +240,27 @@ export const bulkDeleteValidation = [
         .isMongoId()
         .withMessage("Each resume ID must be a valid MongoDB ID"),
 ];
+/**
+ * Validation for updating resume status
+ */
+export const updateResumeStatusValidation = [
+    param("id")
+        .notEmpty()
+        .withMessage("Resume ID is required")
+        .isMongoId()
+        .withMessage("Invalid resume ID format"),
+    body("status")
+        .notEmpty()
+        .withMessage("Status is required")
+        .isIn(["draft", "active", "archived"])
+        .withMessage("Status must be one of: draft, active, archived"),
+    body("note")
+        .optional()
+        .isString()
+        .withMessage("Note must be a string")
+        .isLength({ max: 500 })
+        .withMessage("Note cannot exceed 500 characters"),
+];
 // ============================================
 // Combined Exports for Convenience
 // ============================================
@@ -266,4 +279,5 @@ export const resumeValidations = {
     jobMatches: jobMatchesValidation,
     improvements: improvementSuggestionsValidation,
     bulkDelete: bulkDeleteValidation,
+    updateStatus: updateResumeStatusValidation,
 };

@@ -346,6 +346,33 @@ class ResumeService {
         }
     }
     /**
+     * Update PDF file info for a resume
+     */
+    async updateResumePDF(resumeId, userId, pdfInfo) {
+        try {
+            const resume = await Resume.findOneAndUpdate({
+                _id: new Types.ObjectId(resumeId),
+                user: new Types.ObjectId(userId),
+            }, {
+                pdfFile: pdfInfo,
+                updatedAt: new Date(),
+            }, {
+                new: true,
+                runValidators: true,
+            }).lean();
+            if (!resume) {
+                throw new AppError("Resume not found", 404);
+            }
+            return resume;
+        }
+        catch (error) {
+            logger.error("Update resume PDF error:", error);
+            if (error instanceof AppError)
+                throw error;
+            throw new AppError("Failed to update resume PDF info", 500);
+        }
+    }
+    /**
      * Update resume status
      */
     async updateResumeStatus(resumeId, userId, status) {
@@ -370,141 +397,6 @@ class ResumeService {
             if (error instanceof AppError)
                 throw error;
             throw new AppError("Failed to update resume status", 500);
-        }
-    }
-    /**
-     * Get resumes by template type - FIXED VERSION
-     */
-    async getResumesByTemplate(userId, template) {
-        try {
-            const resumes = await Resume.find({
-                user: new Types.ObjectId(userId),
-                template: template, // Now properly typed
-            }).lean();
-            return resumes;
-        }
-        catch (error) {
-            logger.error("Get resumes by template error:", error);
-            throw new AppError("Failed to fetch resumes", 500);
-        }
-    }
-    /**
-     * Get recent resumes (last 30 days)
-     */
-    async getRecentResumes(userId, days = 30) {
-        try {
-            const date = new Date();
-            date.setDate(date.getDate() - days);
-            const resumes = await Resume.find({
-                user: new Types.ObjectId(userId),
-                createdAt: { $gte: date },
-            })
-                .sort({ createdAt: -1 })
-                .lean();
-            return resumes;
-        }
-        catch (error) {
-            logger.error("Get recent resumes error:", error);
-            throw new AppError("Failed to fetch recent resumes", 500);
-        }
-    }
-    /**
-     * Check if user has resumes
-     */
-    async hasResumes(userId) {
-        try {
-            const count = await Resume.countDocuments({
-                user: new Types.ObjectId(userId),
-            });
-            return count > 0;
-        }
-        catch (error) {
-            logger.error("Check resumes error:", error);
-            return false;
-        }
-    }
-    /**
-     * Get resumes by user ID (alias for getResumesByUser)
-     */
-    async getResumesByUserId(userId, options) {
-        return this.getResumesByUser(userId, options);
-    }
-    /**
-     * Get template statistics
-     */
-    async getTemplateStats(userId) {
-        try {
-            const stats = await Resume.aggregate([
-                {
-                    $match: {
-                        user: new Types.ObjectId(userId),
-                    },
-                },
-                {
-                    $group: {
-                        _id: "$template",
-                        count: { $sum: 1 },
-                        resumes: {
-                            $push: {
-                                _id: "$_id",
-                                title: "$title",
-                                status: "$status",
-                                createdAt: "$createdAt",
-                            }
-                        },
-                    },
-                },
-                {
-                    $sort: { count: -1 },
-                },
-            ]);
-            return stats;
-        }
-        catch (error) {
-            logger.error("Get template stats error:", error);
-            throw new AppError("Failed to get template statistics", 500);
-        }
-    }
-    /**
-     * Get status statistics
-     */
-    async getStatusStats(userId) {
-        try {
-            const stats = await Resume.aggregate([
-                {
-                    $match: {
-                        user: new Types.ObjectId(userId),
-                    },
-                },
-                {
-                    $group: {
-                        _id: "$status",
-                        count: { $sum: 1 },
-                    },
-                },
-                {
-                    $sort: { count: -1 },
-                },
-            ]);
-            return stats;
-        }
-        catch (error) {
-            logger.error("Get status stats error:", error);
-            throw new AppError("Failed to get status statistics", 500);
-        }
-    }
-    /**
-     * Get resume count by user
-     */
-    async getResumeCount(userId) {
-        try {
-            return await Resume.countDocuments({
-                user: new Types.ObjectId(userId),
-            });
-        }
-        catch (error) {
-            logger.error("Get resume count error:", error);
-            return 0;
         }
     }
 }

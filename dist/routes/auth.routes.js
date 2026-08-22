@@ -129,7 +129,7 @@ router.post("/login", validateLogin, async (req, res) => {
         sendSuccess(res, { user, token }, "Login successful");
     }
     catch (error) {
-        sendError(res, error, 401);
+        sendError(res, error, error instanceof Error && error.message.includes("already") ? 400 : 500);
     }
 });
 /**
