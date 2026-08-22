@@ -78,12 +78,7 @@ router.post(
     try {
       const { user, token } = await authService.register(req.body);
 
-      sendSuccess(
-        res,
-        { user, token },
-        "User registered successfully",
-        201,
-      );
+      sendSuccess(res, { user, token }, "User registered successfully", 201);
     } catch (error) {
       sendError(
         res,
@@ -151,7 +146,11 @@ router.post(
 
       sendSuccess(res, { user, token }, "Login successful");
     } catch (error) {
-      sendError(res, error, 401);
+      sendError(
+        res,
+        error,
+        error instanceof Error && error.message.includes("already") ? 400 : 500,
+      );
     }
   },
 );
