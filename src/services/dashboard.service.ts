@@ -43,9 +43,9 @@ interface PopulatedResume {
 // Extended application type with populated fields
 interface PopulatedApplication {
   _id: Types.ObjectId;
-  userId: PopulatedUser; // ✅ Now it's the populated user, not ObjectId
-  jobId: PopulatedJob; // ✅ Now it's the populated job, not ObjectId
-  resumeId: PopulatedResume; // ✅ Now it's the populated resume, not ObjectId
+  user: PopulatedUser; 
+  job: PopulatedJob; 
+  resume: PopulatedResume; 
   status: string;
   aiScore?: number;
   appliedAt?: Date;
@@ -255,7 +255,7 @@ class DashboardService {
 
     const applications = await this.Application.find({
       job: { $in: jobIds },
-    }).populate("user", "name email");
+    }).populate("user", "username email profile.firstName profile.lastName");
 
     const screenedApps = applications.filter(
       (a: any) => a.aiScore !== null && a.aiScore !== undefined,
@@ -315,7 +315,10 @@ class DashboardService {
 
     stats.recentActivities = recentApps.map((app: any) => ({
       id: app._id.toString(),
-      candidateName: (app.user as any)?.name || "Unknown",
+      candidateName:
+        (app.user as any)?.profile?.firstName ||
+        (app.user as any)?.username ||
+        "Unknown",
       jobTitle:
         jobs.find((j: any) => j._id.toString() === app.job.toString())?.title ||
         "Unknown",
@@ -341,7 +344,7 @@ class DashboardService {
 
     const applications = await this.Application.find({
       job: { $in: jobIds },
-    }).populate("user", "name");
+    }).populate("user", "username profile.firstName profile.lastName");
 
     const total = applications.length;
     const screened = applications.filter(
@@ -384,7 +387,10 @@ class DashboardService {
 
     const pendingScreening = pending.slice(0, 20).map((app: any) => ({
       id: app._id.toString(),
-      candidateName: (app.user as any)?.name || "Unknown",
+      candidateName:
+        (app.user as any)?.profile?.firstName ||
+        (app.user as any)?.username ||
+        "Unknown",
       jobTitle:
         jobs.find((j: any) => j._id.toString() === app.job.toString())?.title ||
         "Unknown",
@@ -436,14 +442,14 @@ class DashboardService {
       ];
     } else if (type === "applications") {
       const applications = await this.Application.find({
-        jobId: { $in: jobIds },
-      }).populate("userId", "name email");
+        job: { $in: jobIds },
+      }).populate("user", "username email profile.firstName profile.lastName");
 
       data = applications.map((app: any) => ({
-        candidateName: app.userId?.name || "Unknown",
-        email: app.userId?.email || "",
+        candidateName: app.user?.profile?.firstName || app.user?.username || "Unknown",
+        email: app.user?.email || "",
         jobTitle:
-          jobs.find((j: any) => j._id.toString() === app.jobId.toString())
+          jobs.find((j: any) => j._id.toString() === app.job.toString())
             ?.title || "Unknown",
         status: app.status,
         aiScore: app.aiScore || 0,

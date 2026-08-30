@@ -434,8 +434,8 @@ class ApplicationService {
   ): Promise<IApplication | null> {
     // ✅ Find the application with populated fields
     const application = await Application.findById(applicationId)
-      .populate("jobId", "title companyName company")
-      .populate("userId", "name email");
+      .populate("job", "title company")
+      .populate("user", "username email profile.firstName profile.lastName");
 
     if (!application) {
       throw new AppError("Application not found", 404);
@@ -532,7 +532,7 @@ class ApplicationService {
       await interview.save();
 
       // ✅ Add interview reference to updateData
-      updateData.interviewId = interview._id;
+      updateData.interview = interview._id;
     }
 
     // ✅ Update the application
@@ -544,7 +544,7 @@ class ApplicationService {
 
     // ✅ Populate interview if exists
     if (updatedApplication?.interview) {
-      await updatedApplication.populate("interviewId");
+      await updatedApplication.populate("interview");
     }
 
     // ✅ Log status change
@@ -699,12 +699,12 @@ class ApplicationService {
   ): Promise<IApplication[]> {
     try {
       const applications = await Application.find({
-        jobId,
+        job: jobId,
         aiScore: { $exists: true, $ne: null },
       })
-        .populate("userId", "-password")
-        .populate("resumeId")
-        .populate("interviewId")
+        .populate("user", "-password")
+        .populate("resume")
+        .populate("interview")
         .sort({ aiScore: -1 })
         .limit(limit)
         .exec();
@@ -726,8 +726,8 @@ class ApplicationService {
   async hasUserApplied(jobId: string, userId: string): Promise<boolean> {
     try {
       const application = await Application.findOne({
-        jobId: new Types.ObjectId(jobId),
-        userId: new Types.ObjectId(userId),
+        job: new Types.ObjectId(jobId),
+        user: new Types.ObjectId(userId),
       });
       return !!application;
     } catch (error) {

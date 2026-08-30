@@ -280,11 +280,14 @@ export class CandidateService {
 
       // 4. Get all applications for these jobs
       const applications = await this.Application.find({
-        jobId: { $in: jobIds },
+        job: { $in: jobIds },
       })
-        .populate("userId", "name email phone location profileImage")
-        .populate("jobId", "title company")
-        .populate("resumeId");
+        .populate(
+          "user",
+          "username email profile.firstName profile.lastName profile.phone profile.location profile.profileImage",
+        )
+        .populate("job", "title company")
+        .populate("resume");
 
       if (applications.length === 0) {
         logger.debug("⚠️ No applications found for target jobs");
@@ -297,9 +300,9 @@ export class CandidateService {
       const recommendations: CandidateRecommendation[] = [];
 
       for (const application of applications) {
-        const resume = application.resumeId;
+        const resume = application.resume;
         const job = targetJobs.find(
-          (j: any) => j._id.toString() === application.jobId.toString(),
+          (j: any) => j._id.toString() === application.job.toString(),
         );
 
         if (!resume || !job) continue;
@@ -333,8 +336,8 @@ export class CandidateService {
         recommendations.push({
           candidate: {
             _id: application._id,
-            userId: application.userId,
-            jobId: application.jobId,
+            userId: application.user,
+            jobId: application.job,
           },
           matchScore: matchDetails.overallMatch,
           matchDetails,
@@ -519,9 +522,12 @@ export class CandidateService {
   ): Promise<any | null> {
     // ✅ Use findById with proper population
     const application = await this.Application.findById(candidateId)
-      .populate("userId", "name email phone location") // ✅ Use userId
-      .populate("jobId", "title company")
-      .populate("resumeId");
+      .populate(
+        "user",
+        "username email profile.firstName profile.lastName profile.phone profile.location",
+      )
+      .populate("job", "title company")
+      .populate("resume");
 
     if (!application) {
       return null;
@@ -529,7 +535,7 @@ export class CandidateService {
 
     // Check if the job belongs to this employer
     const job = await this.Job.findOne({
-      _id: application.jobId,
+      _id: application.job,
       postedBy: employerId,
       isDeleted: { $ne: true },
     });
@@ -540,13 +546,13 @@ export class CandidateService {
 
     return {
       _id: application._id,
-      user: application.userId, // ✅ Use userId
-      job: application.jobId,
+      user: application.user, // ✅ Populated user
+      job: application.job,
       status: application.status,
       appliedDate: application.appliedAt || application.createdAt,
       notes: application.notes,
       score: application.aiScore,
-      resume: application.resumeId,
+      resume: application.resume,
       coverLetter: application.coverLetter,
       expectedSalary: application.expectedSalary,
       aiRecommendation: application.aiRecommendation,
@@ -574,14 +580,14 @@ export class CandidateService {
 
       logger.debug(`✅ Application found:`, {
         id: application._id,
-        jobId: application.jobId,
-        userId: application.userId,
+        job: application.job,
+        user: application.user,
         currentStatus: application.status,
       });
 
       // 2. Verify the job belongs to this employer
       const job = await this.Job.findOne({
-        _id: application.jobId,
+        _id: application.job,
         postedBy: employerId,
         isDeleted: { $ne: true },
       });
@@ -624,8 +630,11 @@ export class CandidateService {
       await application.save();
 
       // 9. Return populated application
-      await application.populate("userId", "name email phone");
-      await application.populate("jobId", "title company");
+      await application.populate(
+        "user",
+        "username email profile.firstName profile.lastName profile.phone",
+      );
+      await application.populate("job", "title company");
 
       return application;
     } catch (error) {
@@ -655,14 +664,14 @@ export class CandidateService {
 
       logger.debug(`✅ Application found:`, {
         id: application._id,
-        jobId: application.jobId,
-        userId: application.userId,
-        resumeId: application.resumeId,
+        job: application.job,
+        user: application.user,
+        resume: application.resume,
       });
 
       // 2. Verify the job belongs to this employer
       const job = await this.Job.findOne({
-        _id: application.jobId,
+        _id: application.job,
         postedBy: employerId,
         isDeleted: { $ne: true },
       });
@@ -680,21 +689,21 @@ export class CandidateService {
       // First try using resumeId from application
       let resume = null;
 
-      if (application.resumeId) {
-        resume = await this.Resume.findById(application.resumeId);
-        logger.debug(`📄 Found resume by resumeId: ${!!resume}`);
+      if (application.resume) {
+        resume = await this.Resume.findById(application.resume);
+        logger.debug(`📄 Found resume by resume: ${!!resume}`);
       }
 
-      // If not found by resumeId, try by userId
+      // If not found by resume, try by user
       if (!resume) {
         resume = await this.Resume.findOne({
-          userId: application.userId,
+          user: application.user,
         });
-        logger.debug(`📄 Found resume by userId: ${!!resume}`);
+        logger.debug(`📄 Found resume by user: ${!!resume}`);
       }
 
       if (!resume) {
-        logger.debug(`❌ Resume not found for user: ${application.userId}`);
+        logger.debug(`❌ Resume not found for user: ${application.user}`);
         return null;
       }
 
@@ -737,7 +746,7 @@ export class CandidateService {
    * Get candidate analytics for employer
    */
   async getAnalytics(employerId: string): Promise<AnalyticsData> {
-    const jobs = await this.Job.find({ employerId }).select("_id");
+    const jobs = await this.Job.find({ postedBy: employerId }).select("_id");
     const jobIds = jobs.map((job: any) => job._id);
 
     const [
@@ -748,17 +757,17 @@ export class CandidateService {
       averageScore,
       topSkills,
     ] = await Promise.all([
-      this.Application.countDocuments({ jobId: { $in: jobIds } }),
+      this.Application.countDocuments({ job: { $in: jobIds } }),
       this.Application.aggregate([
-        { $match: { jobId: { $in: jobIds } } },
+        { $match: { job: { $in: jobIds } } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
       this.Application.aggregate([
-        { $match: { jobId: { $in: jobIds } } },
+        { $match: { job: { $in: jobIds } } },
         {
           $lookup: {
             from: "jobs",
-            localField: "jobId",
+            localField: "job",
             foreignField: "_id",
             as: "job",
           },
@@ -767,7 +776,7 @@ export class CandidateService {
         { $group: { _id: "$job.title", count: { $sum: 1 } } },
       ]),
       this.Application.aggregate([
-        { $match: { jobId: { $in: jobIds } } },
+        { $match: { job: { $in: jobIds } } },
         {
           $group: {
             _id: {
@@ -780,7 +789,7 @@ export class CandidateService {
         { $limit: 30 },
       ]),
       this.Application.aggregate([
-        { $match: { jobId: { $in: jobIds }, score: { $exists: true } } },
+        { $match: { job: { $in: jobIds }, score: { $exists: true } } },
         { $group: { _id: null, avg: { $avg: "$score" } } },
       ]),
       this.getTopSkills(jobIds),
@@ -803,11 +812,11 @@ export class CandidateService {
     jobIds: Types.ObjectId[],
   ): Promise<{ skill: string; count: number }[]> {
     const applications = await this.Application.find({
-      jobId: { $in: jobIds },
+      job: { $in: jobIds },
     });
-    const userIds = applications.map((app: any) => app.userId);
+    const userIds = applications.map((app: any) => app.user);
 
-    const resumes = await this.Resume.find({ userId: { $in: userIds } });
+    const resumes = await this.Resume.find({ user: { $in: userIds } });
 
     const skillCount: Record<string, number> = {};
     resumes.forEach((resume: any) => {
@@ -899,20 +908,26 @@ export class CandidateService {
    * Export candidates data
    */
   async exportCandidates(employerId: string): Promise<any[]> {
-    const jobs = await this.Job.find({ employerId }).select("_id");
+    const jobs = await this.Job.find({ postedBy: employerId }).select("_id");
     const jobIds = jobs.map((job: any) => job._id);
 
     const applications = await this.Application.find({
-      jobId: { $in: jobIds },
+      job: { $in: jobIds },
     })
-      .populate("userId", "name email phone location")
-      .populate("jobId", "title");
+      .populate(
+        "user",
+        "username email profile.firstName profile.lastName profile.phone profile.location",
+      )
+      .populate("job", "title");
 
     return applications.map((app: any) => ({
-      name: app.userId?.name || "N/A",
-      email: app.userId?.email || "N/A",
-      phone: app.userId?.phone || "N/A",
-      position: app.jobId?.title || "N/A",
+      name:
+        app.user?.profile?.firstName ||
+        app.user?.username ||
+        "N/A",
+      email: app.user?.email || "N/A",
+      phone: app.user?.profile?.phone || "N/A",
+      position: app.job?.title || "N/A",
       status: app.status,
       appliedDate: app.createdAt,
     }));
@@ -932,7 +947,7 @@ export class CandidateService {
     }
 
     const job = await this.Job.findOne({
-      _id: application.jobId,
+      _id: application.job,
       postedBy: employerId,
     });
 
@@ -961,7 +976,7 @@ export class CandidateService {
     }
 
     const job = await this.Job.findOne({
-      _id: application.jobId,
+      _id: application.job,
       postedBy: employerId,
     });
 
@@ -1203,11 +1218,7 @@ export class CandidateService {
 
       // 1. Get all jobs posted by this employer
       const employerJobs = await this.Job.find({
-        $or: [
-          { postedBy: employerId },
-          { employerId: employerId },
-          { ownerId: employerId },
-        ],
+        postedBy: employerId,
         isDeleted: { $ne: true },
       }).select("_id title");
 
@@ -1227,29 +1238,32 @@ export class CandidateService {
 
       // 2. Build query for shortlisted candidates
       const query: any = {
-        jobId: { $in: jobIds },
+        job: { $in: jobIds },
         status: { $in: ["shortlisted", "interview_scheduled"] }, // Shortlisted or interview
       };
 
       // Add job filter if specified
       if (jobId) {
-        query.jobId = jobId;
+        query.job = jobId;
       }
 
       // Add search filter
       if (search) {
         const userIds = await this.getUserIdsBySearch(search);
         if (userIds.length > 0) {
-          query.userId = { $in: userIds };
+          query.user = { $in: userIds };
         }
       }
 
       // 3. Get shortlisted candidates with pagination
       const [candidates, total] = await Promise.all([
         this.Application.find(query)
-          .populate("userId", "name email phone location")
-          .populate("jobId", "title company department")
-          .populate("resumeId")
+          .populate(
+            "user",
+            "username email profile.firstName profile.lastName profile.phone profile.location",
+          )
+          .populate("job", "title company")
+          .populate("resume")
           .skip(skip)
           .limit(limit)
           .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 }),
@@ -1263,24 +1277,26 @@ export class CandidateService {
       const formattedCandidates = candidates.map((app: any) => ({
         _id: app._id,
         user: {
-          _id: app.userId?._id,
-          name: app.userId?.name || "Unknown",
-          email: app.userId?.email,
-          phone: app.userId?.phone,
-          location: app.userId?.location,
+          _id: app.user?._id,
+          name:
+            app.user?.profile?.firstName ||
+            app.user?.username ||
+            "Unknown",
+          email: app.user?.email,
+          phone: app.user?.profile?.phone,
+          location: app.user?.profile?.location,
         },
         job: {
-          _id: app.jobId?._id,
-          title: app.jobId?.title || "N/A",
-          company: app.jobId?.company,
-          department: app.jobId?.department,
+          _id: app.job?._id,
+          title: app.job?.title || "N/A",
+          company: app.job?.company,
         },
         status: app.status,
         stage: app.stage || "shortlisted",
         score: app.aiScore || 0,
         appliedDate: app.appliedAt || app.createdAt,
         shortlistedDate: app.shortlistedAt || app.updatedAt,
-        resume: app.resumeId,
+        resume: app.resume,
         coverLetter: app.coverLetter,
         expectedSalary: app.expectedSalary,
         notes: app.notes,
@@ -1318,12 +1334,12 @@ export class CandidateService {
     byStage: { stage: string; count: number }[];
   }> {
     const match: any = {
-      jobId: { $in: jobIds },
+      job: { $in: jobIds },
       status: { $in: ["shortlisted", "interview_scheduled"] },
     };
 
     if (jobId) {
-      match.jobId = jobId;
+      match.job = jobId;
     }
 
     // Get total count
@@ -1335,7 +1351,7 @@ export class CandidateService {
       {
         $lookup: {
           from: "jobs",
-          localField: "jobId",
+          localField: "job",
           foreignField: "_id",
           as: "job",
         },
@@ -1343,7 +1359,7 @@ export class CandidateService {
       { $unwind: "$job" },
       {
         $group: {
-          _id: "$jobId",
+          _id: "$job._id",
           jobTitle: { $first: "$job.title" },
           count: { $sum: 1 },
         },
@@ -1455,11 +1471,7 @@ export class CandidateService {
 
       // 1. Get all jobs posted by this employer
       const employerJobs = await this.Job.find({
-        $or: [
-          { postedBy: employerId },
-          { employerId: employerId },
-          { ownerId: employerId },
-        ],
+        postedBy: employerId,
         isDeleted: { $ne: true },
       }).select("_id title");
 
@@ -1482,13 +1494,13 @@ export class CandidateService {
 
       // 2. Build query
       const query: any = {
-        jobId: { $in: jobIds },
+        job: { $in: jobIds },
         status: { $in: ["shortlisted", "interview_scheduled"] },
       };
 
       // Add job filter
       if (jobId) {
-        query.jobId = jobId;
+        query.job = jobId;
       }
 
       // Add status filter
@@ -1512,16 +1524,19 @@ export class CandidateService {
       if (search) {
         const userIds = await this.getUserIdsBySearch(search);
         if (userIds.length > 0) {
-          query.userId = { $in: userIds };
+          query.user = { $in: userIds };
         }
       }
 
       // 3. Get applications with pagination and sorting
       const [applications, total] = await Promise.all([
         this.Application.find(query)
-          .populate("userId", "name email phone location profileImage")
-          .populate("jobId", "title company department location type")
-          .populate("resumeId")
+          .populate(
+            "user",
+            "username email profile.firstName profile.lastName profile.phone profile.location profile.profileImage",
+          )
+          .populate("job", "title company")
+          .populate("resume")
           .skip(skip)
           .limit(limit)
           .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 }),
@@ -1556,20 +1571,20 @@ export class CandidateService {
           return {
             _id: app._id,
             candidate: {
-              _id: app.userId?._id,
-              name: app.userId?.name || "Unknown",
-              email: app.userId?.email,
-              phone: app.userId?.phone,
-              location: app.userId?.location,
-              profileImage: app.userId?.profileImage,
+              _id: app.user?._id,
+              name:
+                app.user?.profile?.firstName ||
+                app.user?.username ||
+                "Unknown",
+              email: app.user?.email,
+              phone: app.user?.profile?.phone,
+              location: app.user?.profile?.location,
+              profileImage: app.user?.profile?.profileImage,
             },
             job: {
-              _id: app.jobId?._id,
-              title: app.jobId?.title || "N/A",
-              company: app.jobId?.company,
-              department: app.jobId?.department,
-              location: app.jobId?.location,
-              type: app.jobId?.type,
+              _id: app.job?._id,
+              title: app.job?.title || "N/A",
+              company: app.job?.company,
             },
             status: app.status,
             stage: app.stage || "shortlisted",
@@ -1579,7 +1594,7 @@ export class CandidateService {
             aiWeaknesses: app.aiWeaknesses || [],
             appliedDate: app.appliedAt || app.createdAt,
             shortlistedDate: app.shortlistedAt || app.updatedAt,
-            resume: app.resumeId,
+            resume: app.resume,
             coverLetter: app.coverLetter,
             expectedSalary: app.expectedSalary,
             availability: app.availability,
@@ -1627,11 +1642,11 @@ export class CandidateService {
     totalWithAI: number;
   }> {
     const match: any = {
-      jobId: { $in: jobIds },
+      job: { $in: jobIds },
       status: { $in: ["shortlisted", "interview_scheduled"] },
     };
 
-    if (filters.jobId) match.jobId = filters.jobId;
+    if (filters.jobId) match.job = filters.jobId;
     if (filters.status) match.status = filters.status;
     if (filters.stage) match.stage = filters.stage;
     if (filters.startDate || filters.endDate) {
@@ -1668,7 +1683,7 @@ export class CandidateService {
       {
         $lookup: {
           from: "jobs",
-          localField: "jobId",
+          localField: "job",
           foreignField: "_id",
           as: "job",
         },
@@ -1676,7 +1691,7 @@ export class CandidateService {
       { $unwind: "$job" },
       {
         $group: {
-          _id: "$jobId",
+          _id: "$job._id",
           jobTitle: { $first: "$job.title" },
           count: { $sum: 1 },
         },
@@ -1776,9 +1791,12 @@ export class CandidateService {
 
       // 1. Find the application
       const application = await this.Application.findById(candidateId)
-        .populate("userId", "name email")
-        .populate("jobId", "title company")
-        .populate("resumeId");
+        .populate(
+          "user",
+          "username email profile.firstName profile.lastName",
+        )
+        .populate("job", "title company")
+        .populate("resume");
 
       if (!application) {
         logger.debug(`❌ Application not found: ${candidateId}`);
@@ -1787,12 +1805,8 @@ export class CandidateService {
 
       // 2. Verify the job belongs to this employer
       const job = await this.Job.findOne({
-        _id: application.jobId,
-        $or: [
-          { postedBy: employerId },
-          { employerId: employerId },
-          { ownerId: employerId },
-        ],
+        _id: application.job,
+        postedBy: employerId,
         isDeleted: { $ne: true },
       });
 
@@ -1814,15 +1828,15 @@ export class CandidateService {
       }
 
       // 4. Get the resume
-      let resume = application.resumeId;
+      let resume = application.resume;
 
       if (!resume) {
-        // Try to find resume by userId
-        resume = await this.Resume.findOne({ userId: application.userId });
+        // Try to find resume by user
+        resume = await this.Resume.findOne({ user: application.user });
       }
 
       if (!resume) {
-        logger.debug(`❌ Resume not found for user: ${application.userId}`);
+        logger.debug(`❌ Resume not found for user: ${application.user}`);
         return null;
       }
 
@@ -1830,9 +1844,12 @@ export class CandidateService {
 
       // 5. Prepare response based on format
       const metadata = {
-        candidateName: application.userId?.name || "Unknown",
-        candidateEmail: application.userId?.email || "Unknown",
-        jobTitle: application.jobId?.title || "N/A",
+        candidateName:
+          application.user?.profile?.firstName ||
+          application.user?.username ||
+          "Unknown",
+        candidateEmail: application.user?.email || "Unknown",
+        jobTitle: application.job?.title || "N/A",
         applicationId: application._id.toString(),
         resumeTitle: resume.title || "Resume",
         template: resume.template || "default",
@@ -1858,7 +1875,11 @@ export class CandidateService {
             awards: resume.awards,
             completionScore: resume.completionScore,
           },
-          fileName: `${application.userId?.name || "candidate"}_resume.json`,
+          fileName: `${
+            application.user?.profile?.firstName ||
+            application.user?.username ||
+            "candidate"
+          }_resume.json`,
           fileType: "application/json",
           metadata,
         };
@@ -1876,7 +1897,11 @@ export class CandidateService {
 
         return {
           resume: null,
-          fileName: `${application.userId?.name || "candidate"}_resume.pdf`,
+          fileName: `${
+            application.user?.profile?.firstName ||
+            application.user?.username ||
+            "candidate"
+          }_resume.pdf`,
           fileType: "application/pdf",
           url: resumeUrl,
           metadata,
@@ -1887,7 +1912,11 @@ export class CandidateService {
       if (resume.pdfFile) {
         return {
           resume: resume.pdfFile,
-          fileName: `${application.userId?.name || "candidate"}_resume.pdf`,
+          fileName: `${
+            application.user?.profile?.firstName ||
+            application.user?.username ||
+            "candidate"
+          }_resume.pdf`,
           fileType: "application/pdf",
           content: resume.pdfFile,
           metadata,
@@ -1901,7 +1930,11 @@ export class CandidateService {
         // If we have a URL, redirect or return it
         return {
           resume: null,
-          fileName: `${application.userId?.name || "candidate"}_resume.pdf`,
+          fileName: `${
+            application.user?.profile?.firstName ||
+            application.user?.username ||
+            "candidate"
+          }_resume.pdf`,
           fileType: "application/pdf",
           url: resumeUrl,
           metadata,
@@ -1914,7 +1947,11 @@ export class CandidateService {
         // For now, return the path
         return {
           resume: resume.filePath,
-          fileName: `${application.userId?.name || "candidate"}_resume.pdf`,
+          fileName: `${
+            application.user?.profile?.firstName ||
+            application.user?.username ||
+            "candidate"
+          }_resume.pdf`,
           fileType: "application/pdf",
           metadata,
         };
@@ -1951,11 +1988,7 @@ export class CandidateService {
 
       // 1. Get all jobs posted by this employer
       const employerJobs = await this.Job.find({
-        $or: [
-          { postedBy: employerId },
-          { employerId: employerId },
-          { ownerId: employerId },
-        ],
+        postedBy: employerId,
         isDeleted: { $ne: true },
       }).select("_id");
 
@@ -1963,12 +1996,12 @@ export class CandidateService {
 
       // 2. Build query
       const query: any = {
-        jobId: { $in: jobIds },
+        job: { $in: jobIds },
         status: { $in: ["shortlisted", "interview_scheduled"] },
       };
 
       if (jobId) {
-        query.jobId = jobId;
+        query.job = jobId;
       }
 
       if (candidateIds && candidateIds.length > 0) {
@@ -1977,8 +2010,11 @@ export class CandidateService {
 
       // 3. Get applications
       const applications = await this.Application.find(query)
-        .populate("userId", "name email")
-        .populate("jobId", "title")
+        .populate(
+          "user",
+          "username email profile.firstName profile.lastName",
+        )
+        .populate("job", "title")
         .limit(limit)
         .sort({ updatedAt: -1 });
 

@@ -90,11 +90,11 @@ class CompanyService {
     }
 
     // Get job statistics
-    const jobs = await Job.find({ employerId: userId });
+    const jobs = await Job.find({ postedBy: userId });
     const jobIds = jobs.map((job) => job._id);
 
     const applications = await Application.find({
-      jobId: { $in: jobIds },
+      job: { $in: jobIds },
     });
 
     const companyObj = company.toObject();
@@ -349,14 +349,14 @@ class CompanyService {
       activeJobs,
     ] = await Promise.all([
       Application.countDocuments({
-        jobId: { $in: jobIdStrings },
+        job: { $in: jobIdStrings },
       }),
       Application.aggregate([
-        { $match: { jobId: { $in: jobIdStrings } } },
+        { $match: { job: { $in: jobIdStrings } } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ] as any),
       Application.aggregate([
-        { $match: { jobId: { $in: jobIdStrings } } },
+        { $match: { job: { $in: jobIdStrings } } },
         {
           $group: {
             _id: {
@@ -404,12 +404,12 @@ class CompanyService {
    */
   private async getTopSkills(jobIds: string[]): Promise<any[]> {
     const applications = await Application.find({
-      jobId: { $in: jobIds },
+      job: { $in: jobIds },
     });
-    const userIds = applications.map((app: any) => app.userId?.toString());
+    const userIds = applications.map((app: any) => app.user?.toString());
 
     const resumes = await Resume.find({
-      userId: { $in: userIds },
+      user: { $in: userIds },
     });
 
     const skillCount: Record<string, number> = {};

@@ -511,7 +511,7 @@ class JobService {
 
       // Get applications for these jobs
       const applications = await Application.find({
-        jobId: { $in: jobIds },
+        job: { $in: jobIds },
       });
 
       // Calculate statistics
@@ -547,7 +547,7 @@ class JobService {
       const applicationsByJob = await Promise.all(
         jobs.map(async (job: any) => {
           const count = await Application.countDocuments({
-            jobId: job._id,
+            job: job._id,
           });
           return {
             jobId: job._id,
@@ -635,7 +635,7 @@ class JobService {
 
       // ✅ Build query
       const query: any = {
-        jobId: new Types.ObjectId(jobId), // ✅ Use ObjectId
+        job: new Types.ObjectId(jobId), // ✅ Use ObjectId
       };
 
       if (status) {
@@ -650,8 +650,11 @@ class JobService {
       // ✅ Get applications with pagination
       const [applications, total] = await Promise.all([
         Application.find(query)
-          .populate("userId", "name email profileImage phone location")
-          .populate("resumeId", "title template skills")
+          .populate(
+            "user",
+            "username email profile.firstName profile.lastName profile.profileImage profile.phone profile.location",
+          )
+          .populate("resume", "title template skills")
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
@@ -661,7 +664,7 @@ class JobService {
 
       // ✅ Get application statistics
       const statusCounts = await Application.aggregate([
-        { $match: { jobId: new Types.ObjectId(jobId) } },
+        { $match: { job: new Types.ObjectId(jobId) } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]);
 
@@ -800,7 +803,7 @@ class JobService {
     }
 
     const applications = await Application.find({
-      jobId: { $in: jobIds },
+      job: { $in: jobIds },
     });
 
     const jobsByStatus: Record<string, number> = {};
@@ -812,7 +815,7 @@ class JobService {
     // Calculate top performing jobs
     const jobPerformance = jobs.map((job: any) => {
       const jobApps = applications.filter(
-        (app: any) => app.jobId.toString() === job._id.toString(),
+        (app: any) => app.job.toString() === job._id.toString(),
       );
       const hires = jobApps.filter(
         (app: any) => app.status === ApplicationStatus.HIRED,
@@ -1296,7 +1299,7 @@ class JobService {
 
       // Get applications for these jobs
       const applications = await Application.find({
-        jobId: { $in: jobIds },
+        job: { $in: jobIds },
       });
 
       // Calculate date range
@@ -1306,7 +1309,7 @@ class JobService {
       // returned by getJobStats / getJobPerformance, now consolidated here.
       const applicationsByJob = jobs.map((job: any) => {
         const count = applications.filter(
-          (app: any) => app.jobId && app.jobId.toString() === job._id.toString(),
+          (app: any) => app.job && app.job.toString() === job._id.toString(),
         ).length;
         return {
           jobId: job._id,
@@ -1639,7 +1642,7 @@ class JobService {
     return jobs
       .map((job: any) => {
         const jobApplications = applications.filter(
-          (app: any) => app.jobId.toString() === job._id.toString(),
+          (app: any) => app.job.toString() === job._id.toString(),
         );
         const views = job.views || 0;
         return {
@@ -1666,8 +1669,9 @@ class JobService {
       .slice(0, 10)
       .map((app: any) => ({
         id: app._id,
-        candidateName: app.userId?.name || "Unknown",
-        jobTitle: app.jobId?.title || "N/A",
+        candidateName:
+          app.user?.profile?.firstName || app.user?.username || "Unknown",
+        jobTitle: app.job?.title || "N/A",
         status: app.status,
         timestamp: app.updatedAt,
       }));
