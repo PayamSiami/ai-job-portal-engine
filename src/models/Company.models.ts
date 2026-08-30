@@ -102,7 +102,7 @@ export interface ICompany extends Document {
   createdAt: Date;
   updatedAt: Date;
   isDeleted: boolean;
-  deletedAt: Date;
+  deletedAt?: Date;
 }
 
 // ==================== Schema ====================

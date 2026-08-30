@@ -118,8 +118,8 @@ const applicationSchema = new Schema({
     toObject: { versionKey: false },
 });
 // Indexes
-applicationSchema.index({ job: 1, userId: 1 }, { unique: true });
-applicationSchema.index({ userId: 1, status: 1 });
+applicationSchema.index({ job: 1, user: 1 }, { unique: true });
+applicationSchema.index({ user: 1, status: 1 });
 applicationSchema.index({ job: 1, status: 1 });
 applicationSchema.index({ status: 1, appliedAt: -1 });
 applicationSchema.index({ interview: 1 });

@@ -239,7 +239,7 @@ InterviewSchema.statics.findTodayInterviews = function () {
     return this.find({
         status: { $in: [InterviewStatus.SCHEDULED, InterviewStatus.CONFIRMED] },
         scheduledDate: { $gte: start, $lte: end },
-    }).populate("candidate", "name email phone");
+    }).populate("candidate", "username email profile.firstName profile.lastName profile.phone");
 };
 // ==================== Model ====================
 export const Interview = mongoose.model("Interview", InterviewSchema);
