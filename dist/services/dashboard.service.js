@@ -42,7 +42,7 @@ class DashboardService {
         }
         const applications = await this.Application.find({
             job: { $in: jobIds },
-        }).populate("user", "name email");
+        }).populate("user", "username email profile.firstName profile.lastName");
         const screenedApps = applications.filter((a) => a.aiScore !== null && a.aiScore !== undefined);
         const totalAIScore = screenedApps.reduce((sum, a) => sum + (a.aiScore || 0), 0);
         const stats = {
@@ -72,7 +72,9 @@ class DashboardService {
             .slice(0, 10);
         stats.recentActivities = recentApps.map((app) => ({
             id: app._id.toString(),
-            candidateName: app.user?.name || "Unknown",
+            candidateName: app.user?.profile?.firstName ||
+                app.user?.username ||
+                "Unknown",
             jobTitle: jobs.find((j) => j._id.toString() === app.job.toString())?.title ||
                 "Unknown",
             status: app.status,
@@ -92,7 +94,7 @@ class DashboardService {
         }
         const applications = await this.Application.find({
             job: { $in: jobIds },
-        }).populate("user", "name");
+        }).populate("user", "username profile.firstName profile.lastName");
         const total = applications.length;
         const screened = applications.filter((a) => a.aiScore !== null && a.aiScore !== undefined);
         const pending = applications.filter((a) => a.aiScore === null || a.aiScore === undefined);
@@ -114,7 +116,9 @@ class DashboardService {
         });
         const pendingScreening = pending.slice(0, 20).map((app) => ({
             id: app._id.toString(),
-            candidateName: app.user?.name || "Unknown",
+            candidateName: app.user?.profile?.firstName ||
+                app.user?.username ||
+                "Unknown",
             jobTitle: jobs.find((j) => j._id.toString() === app.job.toString())?.title ||
                 "Unknown",
             appliedDate: app.appliedAt || app.createdAt,
@@ -158,12 +162,12 @@ class DashboardService {
         }
         else if (type === "applications") {
             const applications = await this.Application.find({
-                jobId: { $in: jobIds },
-            }).populate("userId", "name email");
+                job: { $in: jobIds },
+            }).populate("user", "username email profile.firstName profile.lastName");
             data = applications.map((app) => ({
-                candidateName: app.userId?.name || "Unknown",
-                email: app.userId?.email || "",
-                jobTitle: jobs.find((j) => j._id.toString() === app.jobId.toString())
+                candidateName: app.user?.profile?.firstName || app.user?.username || "Unknown",
+                email: app.user?.email || "",
+                jobTitle: jobs.find((j) => j._id.toString() === app.job.toString())
                     ?.title || "Unknown",
                 status: app.status,
                 aiScore: app.aiScore || 0,

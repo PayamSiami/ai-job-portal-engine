@@ -4,7 +4,6 @@ import logger from "../utils/logger";
 dotenv.config();
 
 class Config {
-  public GEMINI_API_KEY: string | undefined;
   public JWT_SECRET: string | undefined;
   public JWT_EXPIRE: string | undefined;
   public PORT: string | undefined;
@@ -13,8 +12,6 @@ class Config {
   public GEMINI_TEMPERATURE: number;
   public GEMINI_TOP_K: number;
   public GEMINI_TOP_P: number;
-  public GROQ_MODEL: string;
-  public GROQ_API_KEY: string;
   public MONGODB_URI: string;
   public CORS_ORIGIN: string;
   public CORS_CREDENTIALS: boolean;
@@ -25,9 +22,13 @@ class Config {
   // Google OAuth
   public GOOGLE_CLIENT_ID: string | undefined;
   public GOOGLE_CLIENT_SECRET: string | undefined;
+  // Unified AI provider (OpenAI-compatible). Defaults to a local 9router-style endpoint.
+  public AI_PROVIDER: string;
+  public AI_BASE_URL: string;
+  public AI_API_KEY: string;
+  public AI_MODEL: string;
 
   constructor() {
-    this.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
     this.JWT_SECRET = process.env.JWT_SECRET || "";
     this.JWT_EXPIRE = process.env.JWT_EXPIRE || ""
     this.PORT = process.env.PORT || "";
@@ -38,8 +39,14 @@ class Config {
     );
     this.GEMINI_TOP_K = parseInt(process.env.GEMINI_TOP_K || "1", 10);
     this.GEMINI_TOP_P = parseFloat(process.env.GEMINI_TOP_P || "0.8");
-    this.GROQ_API_KEY = process.env.GROQ_API_KEY || "";
-    this.GROQ_MODEL = process.env.GROQ_MODEL || "";
+    this.AI_PROVIDER = process.env.AI_PROVIDER || "openai";
+    // OpenAI-compatible base URL (e.g. 9router at http://localhost:20128/v1)
+    this.AI_BASE_URL =
+      process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "http://localhost:20128/v1";
+    this.AI_API_KEY =
+      process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
+    this.AI_MODEL =
+      process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
     this.MONGODB_URI = process.env.MONGODB_URI || "";
     this.CORS_ORIGIN = process.env.CORS_ORIGIN || "";
     this.CORS_CREDENTIALS = process.env.CORS_CREDENTIALS === "true";

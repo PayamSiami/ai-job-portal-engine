@@ -177,6 +177,10 @@ export const generateCoverLetterValidation = [
         .optional()
         .isIn(["professional", "enthusiastic", "confident", "creative"])
         .withMessage("Invalid tone option. Must be one of: professional, enthusiastic, confident, creative"),
+    body("language")
+        .optional()
+        .isString()
+        .withMessage("language must be a string (e.g. 'fa' for Farsi, 'en' for English)"),
     body("length")
         .optional()
         .isIn(["short", "medium", "long"])

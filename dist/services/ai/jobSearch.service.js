@@ -1,31 +1,16 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../../config/index.js";
 import logger from "../../utils/logger.js";
+import { completePrompt } from "./aiClient.js";
 class JobService {
-    genAI = null;
-    model = null;
+    isAIEnabled = false;
     constructor() {
-        const apiKey = process.env.GEMINI_API_KEY;
-        // ✅ Don't throw error - just warn and continue
-        if (apiKey) {
-            try {
-                this.genAI = new GoogleGenerativeAI(apiKey);
-                this.model = this.genAI.getGenerativeModel({
-                    model: config.GEMINI_MODEL,
-                    generationConfig: {
-                        temperature: 0.3,
-                        topK: 1,
-                        topP: 0.8,
-                    },
-                });
-                logger.info("Gemini AI initialized successfully");
-            }
-            catch (error) {
-                logger.warn("Failed to initialize Gemini AI", { error });
-            }
+        // AI is enabled when an AI model + endpoint is configured.
+        this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+        if (!this.isAIEnabled) {
+            logger.warn("AI_MODEL/AI_BASE_URL not configured. AI features will use fallbacks.");
         }
         else {
-            logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
+            logger.info(`AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`);
         }
     }
     cleanAIResponse(responseText) {
@@ -79,7 +64,7 @@ class JobService {
             throw new Error("Search query is required");
         }
         // Check if AI is available
-        if (!this.model) {
+        if (!this.isAIEnabled) {
             logger.warn("AI not available. Using fallback parsing.");
             return this.parseFallback(query);
         }
@@ -136,8 +121,11 @@ class JobService {
     IMPORTANT: Return ONLY the JSON object, no other text.
   `;
         try {
-            const result = await this.model.generateContent(prompt);
-            const cleanedText = this.cleanAIResponse(result.response.text());
+            const result = await completePrompt("You are an expert job-search query parser. Return ONLY valid JSON without markdown or extra text.", prompt, { temperature: 0.3, maxTokens: 500, topP: 0.8 });
+            if (!result.success) {
+                throw new Error(result.error || "AI request failed");
+            }
+            const cleanedText = this.cleanAIResponse(result.content);
             const parsed = JSON.parse(cleanedText);
             logger.debug("AI Parsed Filters", { parsed });
             return {

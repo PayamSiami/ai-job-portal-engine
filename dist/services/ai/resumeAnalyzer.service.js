@@ -1,53 +1,24 @@
 // src/services/ai/resumeAnalyzer.ts
-import { GoogleGenerativeAI, } from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
 import logger from "../../utils/logger.js";
 import hashString from "../../utils/hashString.js";
+import { completePrompt } from "./aiClient.js";
 // ============ Service Class ============
 class ResumeAnalyzerService {
-    genAI;
-    model;
     cache;
     MAX_RESUME_LENGTH = 4000;
     MAX_JOB_DETAILS_LENGTH = 2000;
     DEFAULT_CACHE_TTL = 3600; // 1 hour
     isAIEnabled = false;
     constructor() {
-        const apiKey = config.GEMINI_API_KEY;
-        // Check if API key exists
-        if (!apiKey) {
-            logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
-            this.isAIEnabled = false;
+        // AI is enabled when an AI model + endpoint is configured.
+        this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+        if (!this.isAIEnabled) {
+            logger.warn("AI_MODEL/AI_BASE_URL not configured. AI features will use fallbacks.");
         }
         else {
-            try {
-                this.genAI = new GoogleGenerativeAI(apiKey);
-                const generationConfig = {
-                    temperature: 0.1,
-                    topK: 1,
-                    topP: 0.8,
-                    maxOutputTokens: 800,
-                };
-                // ✅ Try different model versions
-                const modelName = this.getAvailableModel();
-                if (modelName) {
-                    this.model = this.genAI.getGenerativeModel({
-                        model: modelName,
-                        generationConfig,
-                    });
-                    this.isAIEnabled = true;
-                    logger.info(`Gemini AI initialized with model: ${modelName}`);
-                }
-                else {
-                    logger.warn("No Gemini model available. AI features will be disabled.");
-                    this.isAIEnabled = false;
-                }
-            }
-            catch (error) {
-                logger.warn("Failed to initialize Gemini AI", { error });
-                this.isAIEnabled = false;
-            }
+            logger.info(`AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`);
         }
         // Initialize cache
         this.cache = new NodeCache({
@@ -62,7 +33,7 @@ class ResumeAnalyzerService {
         const startTime = Date.now();
         const { retryCount = 2, useCache = true, industry, targetRole } = options;
         // ✅ If AI is disabled, use fallback
-        if (!this.isAIEnabled || !this.model) {
+        if (!this.isAIEnabled) {
             logger.warn("AI not available, using fallback analysis");
             return this.getFallbackAnalysisResult(startTime);
         }
@@ -85,7 +56,7 @@ class ResumeAnalyzerService {
                     ...cached,
                     metadata: {
                         processingTime: Date.now() - startTime,
-                        modelUsed: cached.metadata?.modelUsed ?? "gemini-pro",
+                        modelUsed: cached.metadata?.modelUsed ?? config.AI_MODEL,
                         timestamp: cached.metadata?.timestamp ?? new Date().toISOString(),
                         fromCache: true,
                     },
@@ -96,8 +67,11 @@ class ResumeAnalyzerService {
             try {
                 const prompt = this.buildAnalysisPrompt(truncatedResume, truncatedRequirements, truncatedDescription, industry, targetRole);
                 logger.info(`Sending analysis request to AI (attempt ${attempt + 1})`);
-                const result = await this.model.generateContent(prompt);
-                const responseText = result.response.text();
+                const result = await completePrompt("You are a professional resume screener and career coach. Return ONLY valid JSON without markdown or extra text.", prompt, { temperature: 0.1, maxTokens: 800, topP: 0.8 });
+                if (!result.success) {
+                    throw new Error(result.error || "AI request failed");
+                }
+                const responseText = result.content;
                 logger.info("AI response received", {
                     length: responseText.length,
                     preview: responseText.substring(0, 200),
@@ -109,7 +83,7 @@ class ResumeAnalyzerService {
                     ...parsed,
                     metadata: {
                         processingTime: Date.now() - startTime,
-                        modelUsed: "gemini-pro",
+                        modelUsed: config.AI_MODEL,
                         timestamp: new Date().toISOString(),
                         fromCache: false,
                     },
@@ -224,13 +198,6 @@ Provide specific, actionable suggestions.
             return this.extractDataFromText(text);
         }
     }
-    /**
-     * Try to find an available model
-     */
-    getAvailableModel() {
-        const models = ["gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro"];
-        return models[0] || "gemini-pro";
-    }
     extractDataFromText(text) {
         const result = {
             matchScore: 50,
@@ -339,13 +306,16 @@ Provide specific, actionable suggestions.
                 return cachedResult;
             }
             // If AI model is not available, return fallback suggestions
-            if (!this.model) {
+            if (!this.isAIEnabled) {
                 return this.getFallbackImprovements(resumeContent);
             }
             // Build prompt for improvement suggestions
             const prompt = this.buildImprovementPrompt(resumeContent, includeContentSuggestions, includeFormattingSuggestions, includeKeywordSuggestions, includeActionVerbs);
-            const result = await this.model.generateContent(prompt);
-            const response = result.response.text();
+            const result = await completePrompt("You are a professional resume advisor. Return ONLY valid JSON without markdown or extra text.", prompt, { temperature: 0.3, maxTokens: 800 });
+            if (!result.success) {
+                throw new Error(result.error || "AI request failed");
+            }
+            const response = result.content;
             const suggestions = this.parseImprovementSuggestions(response);
             // Cache results
             this.cache.set(cacheKey, suggestions);

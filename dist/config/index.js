@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import logger from "../utils/logger.js";
 dotenv.config();
 class Config {
-    GEMINI_API_KEY;
     JWT_SECRET;
     JWT_EXPIRE;
     PORT;
@@ -11,8 +10,11 @@ class Config {
     GEMINI_TEMPERATURE;
     GEMINI_TOP_K;
     GEMINI_TOP_P;
-    GROQ_MODEL;
-    GROQ_API_KEY;
+    // Unified AI provider (OpenAI-compatible). Defaults to a local 9router-style endpoint.
+    AI_PROVIDER;
+    AI_BASE_URL;
+    AI_API_KEY;
+    AI_MODEL;
     MONGODB_URI;
     CORS_ORIGIN;
     CORS_CREDENTIALS;
@@ -24,7 +26,6 @@ class Config {
     GOOGLE_CLIENT_ID;
     GOOGLE_CLIENT_SECRET;
     constructor() {
-        this.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
         this.JWT_SECRET = process.env.JWT_SECRET || "";
         this.JWT_EXPIRE = process.env.JWT_EXPIRE || "";
         this.PORT = process.env.PORT || "";
@@ -33,8 +34,14 @@ class Config {
         this.GEMINI_TEMPERATURE = parseFloat(process.env.GEMINI_TEMPERATURE || "0.3");
         this.GEMINI_TOP_K = parseInt(process.env.GEMINI_TOP_K || "1", 10);
         this.GEMINI_TOP_P = parseFloat(process.env.GEMINI_TOP_P || "0.8");
-        this.GROQ_API_KEY = process.env.GROQ_API_KEY || "";
-        this.GROQ_MODEL = process.env.GROQ_MODEL || "";
+        this.AI_PROVIDER = process.env.AI_PROVIDER || "openai";
+        // OpenAI-compatible base URL (e.g. 9router at http://localhost:20128/v1)
+        this.AI_BASE_URL =
+            process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "http://localhost:20128/v1";
+        this.AI_API_KEY =
+            process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
+        this.AI_MODEL =
+            process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
         this.MONGODB_URI = process.env.MONGODB_URI || "";
         this.CORS_ORIGIN = process.env.CORS_ORIGIN || "";
         this.CORS_CREDENTIALS = process.env.CORS_CREDENTIALS === "true";

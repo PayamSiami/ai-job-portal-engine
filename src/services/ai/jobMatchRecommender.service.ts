@@ -1,13 +1,9 @@
 // src/services/jobMatchRecommender.service.ts
-import {
-  GoogleGenerativeAI,
-  GenerativeModel,
-  GenerationConfig,
-} from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
+import { completePrompt } from "./aiClient";
 
 // ============ Type Definitions ============
 
@@ -111,8 +107,6 @@ export interface BatchMatchResult {
 // ============ Service Class ============
 
 class JobMatchRecommenderService {
-  private genAI: GoogleGenerativeAI;
-  private model: GenerativeModel;
   private cache: NodeCache;
   private readonly MAX_RESUME_LENGTH = 4000;
   private readonly MAX_JOBS_PER_BATCH = 10;
@@ -121,24 +115,11 @@ class JobMatchRecommenderService {
   private readonly DEFAULT_CACHE_TTL = 3600; // 1 hour
 
   constructor() {
-    const apiKey = config.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is required in environment variables");
+    if (!config.AI_MODEL || !config.AI_BASE_URL) {
+      throw new Error(
+        "AI_MODEL and AI_BASE_URL are required in environment variables",
+      );
     }
-
-    this.genAI = new GoogleGenerativeAI(apiKey);
-
-    const generationConfig: GenerationConfig = {
-      temperature: 0.1,
-      topK: 1,
-      topP: 0.8,
-      maxOutputTokens: 600,
-    };
-
-    this.model = this.genAI.getGenerativeModel({
-      model: config.GEMINI_MODEL,
-      generationConfig,
-    });
 
     // Initialize cache
     this.cache = new NodeCache({
@@ -251,8 +232,15 @@ class JobMatchRecommenderService {
 
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       try {
-        const result = await this.model.generateContent(profilePrompt);
-        const cleanedText = this.cleanAIResponse(result.response.text());
+        const result = await completePrompt(
+          "You are a career coach that extracts structured candidate profiles from resumes. Return ONLY valid JSON without markdown or extra text.",
+          profilePrompt,
+          { temperature: 0.1, maxTokens: 600, topP: 0.8 },
+        );
+        if (!result.success) {
+          throw new Error(result.error || "AI request failed");
+        }
+        const cleanedText = this.cleanAIResponse(result.content);
         const profile = this.parseCandidateProfile(cleanedText);
 
         // Store in cache
@@ -325,7 +313,7 @@ class JobMatchRecommenderService {
             ...result,
             metadata: {
               processingTime: result.metadata?.processingTime ?? 0,
-              modelUsed: result.metadata?.modelUsed ?? config.GEMINI_MODEL,
+              modelUsed: result.metadata?.modelUsed ?? config.AI_MODEL,
               timestamp: result.metadata?.timestamp ?? new Date().toISOString(),
               fromCache: true,
               matchedSkills: result.metadata?.matchedSkills ?? [],
@@ -390,7 +378,7 @@ class JobMatchRecommenderService {
           ...cached,
           metadata: {
             processingTime: cached.metadata?.processingTime ?? 0,
-            modelUsed: cached.metadata?.modelUsed ?? config.GEMINI_MODEL,
+            modelUsed: cached.metadata?.modelUsed ?? config.AI_MODEL,
             timestamp: cached.metadata?.timestamp ?? new Date().toISOString(),
             fromCache: true,
             matchedSkills: cached.metadata?.matchedSkills ?? [],
@@ -409,8 +397,15 @@ class JobMatchRecommenderService {
           job,
           includeBreakdown,
         );
-        const result = await this.model.generateContent(prompt);
-        const cleanedText = this.cleanAIResponse(result.response.text());
+        const result = await completePrompt(
+          "You are an AI recruiter that scores how well a candidate matches a job. Return ONLY valid JSON without markdown or extra text.",
+          prompt,
+          { temperature: 0.1, maxTokens: 600, topP: 0.8 },
+        );
+        if (!result.success) {
+          throw new Error(result.error || "AI request failed");
+        }
+        const cleanedText = this.cleanAIResponse(result.content);
 
         const matchData = this.parseMatchResult(
           cleanedText,
@@ -458,7 +453,7 @@ class JobMatchRecommenderService {
       matchQuality: "low",
       metadata: {
         processingTime: 0,
-        modelUsed: config.GEMINI_MODEL,
+        modelUsed: config.AI_MODEL,
         timestamp: new Date().toISOString(),
         fromCache: false,
         matchedSkills: [],
@@ -580,7 +575,7 @@ class JobMatchRecommenderService {
     // ✅ FIX: Always include metadata with all required fields
     const metadata: MatchMetadata = {
       processingTime: Date.now() - startTime,
-      modelUsed: config.GEMINI_MODEL,
+      modelUsed: config.AI_MODEL,
       timestamp: new Date().toISOString(),
       fromCache: false,
       matchedSkills: [],

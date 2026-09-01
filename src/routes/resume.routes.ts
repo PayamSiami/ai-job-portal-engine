@@ -268,6 +268,10 @@ router.get(
  *             properties:
  *               jobId:
  *                 type: string
+ *               language:
+ *                 type: string
+ *                 description: 'Output language code. Defaults to "fa" (Farsi). e.g. fa, en'
+ *                 example: fa
  */
 router.post(
   "/:id/generate-cover-letter",

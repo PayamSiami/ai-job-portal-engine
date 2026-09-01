@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import Job from "../models/Job.models.js";
 import { config } from "../config/index.js";
 import Company from "../models/Company.models.js";
@@ -6,31 +5,16 @@ import { AppError } from "../utils/errorHandler.js";
 import Application, { ApplicationStatus } from "../models/Application.model.js";
 import logger from "../utils/logger.js";
 import mongoose, { Types } from "mongoose";
+import { completePrompt } from "./ai/aiClient.js";
 class JobService {
-    genAI;
-    model;
+    isAIEnabled;
     constructor() {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (apiKey) {
-            try {
-                this.genAI = new GoogleGenerativeAI(apiKey);
-                this.model = this.genAI.getGenerativeModel({
-                    model: config.GEMINI_MODEL || "gemini-pro",
-                    generationConfig: {
-                        temperature: config.GEMINI_TEMPERATURE || 0.7,
-                        topK: config.GEMINI_TOP_K || 40,
-                        topP: config.GEMINI_TOP_P || 0.95,
-                        maxOutputTokens: 2048,
-                    },
-                });
-                logger.info("Gemini AI initialized successfully");
-            }
-            catch (error) {
-                logger.warn("Failed to initialize Gemini AI", { error });
-            }
+        this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+        if (!this.isAIEnabled) {
+            logger.warn("AI_MODEL/AI_BASE_URL not configured. AI content features will use fallbacks.");
         }
         else {
-            logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
+            logger.info(`AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`);
         }
     }
     async getJobs(filters = {}, options = {}) {
@@ -157,7 +141,7 @@ class JobService {
             throw new Error("Job title is required");
         }
         // Check if AI model is available
-        if (!this.model) {
+        if (!this.isAIEnabled) {
             logger.warn("AI model not available. Using fallback content generation.");
             return this.generateFallbackJobContent(jobTitle);
         }
@@ -184,9 +168,11 @@ class JobService {
       Make it realistic, professional, and tailored to the specific job title. Use appropriate salary ranges for the role and location.
     `;
         try {
-            const result = await this.model.generateContent(prompt);
-            const response = result.response;
-            let text = response.text();
+            const result = await completePrompt("You are an expert job poster. Generate realistic, professional job content. Return ONLY valid JSON without markdown or extra text.", prompt, { temperature: 0.7, maxTokens: 2048, topP: 0.95 });
+            if (!result.success) {
+                throw new Error(result.error || "AI request failed");
+            }
+            let text = result.content;
             // Clean the response - remove markdown code blocks
             text = text
                 .replace(/```json\s*/g, "")
@@ -404,7 +390,7 @@ class JobService {
             const jobIds = jobs.map((job) => job._id);
             // Get applications for these jobs
             const applications = await Application.find({
-                jobId: { $in: jobIds },
+                job: { $in: jobIds },
             });
             // Calculate statistics
             const totalJobs = jobs.length;
@@ -419,7 +405,7 @@ class JobService {
             // Get applications by job
             const applicationsByJob = await Promise.all(jobs.map(async (job) => {
                 const count = await Application.countDocuments({
-                    jobId: job._id,
+                    job: job._id,
                 });
                 return {
                     jobId: job._id,
@@ -481,7 +467,7 @@ class JobService {
             }
             // ✅ Build query
             const query = {
-                jobId: new Types.ObjectId(jobId), // ✅ Use ObjectId
+                job: new Types.ObjectId(jobId), // ✅ Use ObjectId
             };
             if (status) {
                 query.status = status;
@@ -491,8 +477,8 @@ class JobService {
             // ✅ Get applications with pagination
             const [applications, total] = await Promise.all([
                 Application.find(query)
-                    .populate("userId", "name email profileImage phone location")
-                    .populate("resumeId", "title template skills")
+                    .populate("user", "username email profile.firstName profile.lastName profile.profileImage profile.phone profile.location")
+                    .populate("resume", "title template skills")
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limit)
@@ -501,7 +487,7 @@ class JobService {
             ]);
             // ✅ Get application statistics
             const statusCounts = await Application.aggregate([
-                { $match: { jobId: new Types.ObjectId(jobId) } },
+                { $match: { job: new Types.ObjectId(jobId) } },
                 { $group: { _id: "$status", count: { $sum: 1 } } },
             ]);
             const statusSummary = statusCounts.reduce((acc, item) => {
@@ -623,7 +609,7 @@ class JobService {
             };
         }
         const applications = await Application.find({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
         });
         const jobsByStatus = {};
         jobs.forEach((job) => {
@@ -632,7 +618,7 @@ class JobService {
         });
         // Calculate top performing jobs
         const jobPerformance = jobs.map((job) => {
-            const jobApps = applications.filter((app) => app.jobId.toString() === job._id.toString());
+            const jobApps = applications.filter((app) => app.job.toString() === job._id.toString());
             const hires = jobApps.filter((app) => app.status === ApplicationStatus.HIRED);
             return {
                 jobTitle: job.title,
@@ -1016,14 +1002,14 @@ class JobService {
             }
             // Get applications for these jobs
             const applications = await Application.find({
-                jobId: { $in: jobIds },
+                job: { $in: jobIds },
             });
             // Calculate date range
             const dateRange = this.getDateRange(timeRange);
             // Build applicationsByJob (sorted by application count) — originally
             // returned by getJobStats / getJobPerformance, now consolidated here.
             const applicationsByJob = jobs.map((job) => {
-                const count = applications.filter((app) => app.jobId && app.jobId.toString() === job._id.toString()).length;
+                const count = applications.filter((app) => app.job && app.job.toString() === job._id.toString()).length;
                 return {
                     jobId: job._id,
                     title: job.title,
@@ -1295,7 +1281,7 @@ class JobService {
     getTopPerformingJobs(jobs, applications) {
         return jobs
             .map((job) => {
-            const jobApplications = applications.filter((app) => app.jobId.toString() === job._id.toString());
+            const jobApplications = applications.filter((app) => app.job.toString() === job._id.toString());
             const views = job.views || 0;
             return {
                 id: job._id,
@@ -1316,8 +1302,8 @@ class JobService {
             .slice(0, 10)
             .map((app) => ({
             id: app._id,
-            candidateName: app.userId?.name || "Unknown",
-            jobTitle: app.jobId?.title || "N/A",
+            candidateName: app.user?.profile?.firstName || app.user?.username || "Unknown",
+            jobTitle: app.job?.title || "N/A",
             status: app.status,
             timestamp: app.updatedAt,
         }));

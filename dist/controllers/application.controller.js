@@ -222,7 +222,7 @@ class ApplicationController {
         }
         // ✅ Verify employer owns this application
         const app = application;
-        if (app.jobId?.postedBy?.toString() !== userId) {
+        if (app.job?.postedBy?.toString() !== userId) {
             throw new AppError("Access denied", 403);
         }
         // ✅ Validate status
@@ -259,7 +259,7 @@ class ApplicationController {
         }
         // ✅ Verify ownership
         const app = application;
-        if (app.userId?._id?.toString() !== userId) {
+        if (app.user?._id?.toString() !== userId) {
             throw new AppError("Access denied", 403);
         }
         const canWithdraw = await applicationService.canWithdraw(applicationId, userId);

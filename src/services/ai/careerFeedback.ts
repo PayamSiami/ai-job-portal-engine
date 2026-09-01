@@ -1,14 +1,8 @@
-// src/services/ai/careerFeedback.ts
-import {
-  GoogleGenerativeAI,
-  GenerativeModel,
-  GenerationConfig,
-} from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
-import { generateWithGroq, testGroqConnection } from "./groq.service";
+import { completePrompt } from "./aiClient";
 
 // ============ Type Definitions ============
 
@@ -95,30 +89,15 @@ export interface ResumeAnalysis {
 // ============ Service Class ============
 
 class CareerFeedbackService {
-  private genAI: GoogleGenerativeAI;
-  private model: GenerativeModel;
   private cache: NodeCache;
   private readonly MAX_RESUME_LENGTH = 5000;
 
   constructor() {
-    const apiKey = config.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is required in environment variables");
+    if (!config.AI_MODEL || !config.AI_BASE_URL) {
+      throw new Error(
+        "AI_MODEL and AI_BASE_URL are required in environment variables",
+      );
     }
-
-    this.genAI = new GoogleGenerativeAI(apiKey);
-
-    const generationConfig: GenerationConfig = {
-      temperature: 0.3,
-      topK: 1,
-      topP: 0.9,
-      maxOutputTokens: 1500,
-    };
-
-    this.model = this.genAI.getGenerativeModel({
-      model: config.GEMINI_MODEL,
-      generationConfig,
-    });
 
     // Initialize cache with 10 minute TTL
     this.cache = new NodeCache({
@@ -174,17 +153,12 @@ class CareerFeedbackService {
 
     let lastError: Error | null = null;
 
-    // Test Groq connection first
-    const isConnected = await testGroqConnection();
-    if (!isConnected) {
-      logger.warn("Groq connection failed, using fallback");
-      return this.getFallbackResult("Groq connection failed");
-    }
-
-    // ✅ Try Groq with retries
+    // ✅ Try the unified AI provider with retries
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       try {
-        logger.info(`Attempt ${attempt + 1}: Generating feedback with Groq`);
+        logger.info(
+          `Attempt ${attempt + 1}: Generating feedback with ${config.AI_MODEL}`,
+        );
 
         const prompt = this.buildFeedbackPrompt(
           truncatedResume,
@@ -193,7 +167,11 @@ class CareerFeedbackService {
           includeDetailed,
         );
 
-        const result = await generateWithGroq(prompt);
+        const result = await completePrompt(
+          "You are an expert career coach. Return ONLY valid JSON without markdown or extra text.",
+          prompt,
+          { temperature: 0.3, maxTokens: 1500, topP: 0.9 },
+        );
 
         if (result.success && result.content) {
           const cleanedText = this.cleanAIResponse(result.content);
@@ -203,7 +181,7 @@ class CareerFeedbackService {
             ...parsed,
             metadata: {
               processingTime: Date.now() - startTime,
-              modelUsed: "groq",
+              modelUsed: config.AI_MODEL,
               timestamp: new Date().toISOString(),
               fromCache: false,
             },
@@ -214,15 +192,15 @@ class CareerFeedbackService {
             this.cache.set(cacheKey, finalResult);
           }
 
-          logger.info("Successfully generated feedback with Groq");
+          logger.info("Successfully generated career feedback");
           return finalResult;
         } else {
-          throw new Error(result.error || "Groq returned empty response");
+          throw new Error(result.error || "AI returned empty response");
         }
       } catch (error: unknown) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
         const message = lastError.message;
-        logger.error(`Groq attempt ${attempt + 1} failed`, { error: message });
+        logger.error(`AI attempt ${attempt + 1} failed`, { error: message });
 
         if (attempt < retryCount) {
           const delayMs = Math.pow(2, attempt) * 1000;
@@ -233,7 +211,9 @@ class CareerFeedbackService {
     }
 
     // ✅ If all attempts fail, use fallback
-    logger.error("All Groq attempts failed, using fallback", { error: lastError?.message });
+    logger.error("All AI attempts failed, using fallback", {
+      error: lastError?.message,
+    });
     return this.getFallbackResult(lastError?.message);
   }
 
@@ -665,7 +645,7 @@ class CareerFeedbackService {
       },
       metadata: {
         processingTime: 0,
-        modelUsed: config.GEMINI_MODEL,
+        modelUsed: config.AI_MODEL,
         timestamp: new Date().toISOString(),
         fromCache: false,
       },

@@ -487,8 +487,10 @@ class ResumeController {
             location: job.location || "",
             requirements: job.requirements || "",
             description: job.description || "",
-        }, content);
-        sendSuccess(res, { coverLetter }, "Cover letter generated successfully");
+        }, content, {
+            language: req.body.language || "fa",
+        });
+        sendSuccess(res, coverLetter, "Cover letter generated successfully");
     });
     /**
      * Get career feedback

@@ -1,13 +1,9 @@
 // src/services/ai/coverLetterGenerator.ts
-import {
-  GoogleGenerativeAI,
-  GenerativeModel,
-  GenerationConfig,
-} from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
+import { completePrompt } from "./aiClient";
 
 // ============ Type Definitions ============
 
@@ -25,6 +21,8 @@ export interface JobDetails {
 export interface CoverLetterOptions {
   maxWords?: number;
   tone?: "professional" | "enthusiastic" | "formal" | "casual" | "confident";
+  /** Output language, e.g. "fa" (Farsi/Persian). Defaults to "fa" (Farsi). */
+  language?: string;
   includeContactInfo?: boolean;
   retryCount?: number;
   timeout?: number;
@@ -58,8 +56,6 @@ export interface CoverLetterVariation {
 // ============ Service Class ============
 
 class CoverLetterGeneratorService {
-  private genAI?: GoogleGenerativeAI;
-  private model?: GenerativeModel;
   private cache: NodeCache;
   private readonly DEFAULT_MAX_WORDS = 250;
   private readonly MAX_RESUME_LENGTH = 4000;
@@ -68,40 +64,16 @@ class CoverLetterGeneratorService {
   private isAIEnabled: boolean = false;
 
   constructor() {
-    const apiKey = config.GEMINI_API_KEY;
-
-    // Check if API key exists
-    if (!apiKey) {
-      logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
-      this.isAIEnabled = false;
+    // AI is enabled when an AI model + endpoint is configured.
+    this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+    if (!this.isAIEnabled) {
+      logger.warn(
+        "AI_MODEL/AI_BASE_URL not configured. AI features will use fallbacks.",
+      );
     } else {
-      try {
-        this.genAI = new GoogleGenerativeAI(apiKey);
-
-        const generationConfig: GenerationConfig = {
-          temperature: 0.7,
-          topK: 1,
-          topP: 0.9,
-          maxOutputTokens: 600,
-        };
-
-        // ✅ Try different model versions
-        const modelName = this.getAvailableModel();
-        if (modelName) {
-          this.model = this.genAI.getGenerativeModel({
-            model: modelName,
-            generationConfig,
-          });
-          this.isAIEnabled = true;
-          logger.info(`Gemini AI initialized with model: ${modelName}`);
-        } else {
-          logger.warn("No Gemini model available. AI features will be disabled.");
-          this.isAIEnabled = false;
-        }
-      } catch (error) {
-        logger.warn("Failed to initialize Gemini AI", { error });
-        this.isAIEnabled = false;
-      }
+      logger.info(
+        `AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`,
+      );
     }
 
     // Initialize cache
@@ -109,17 +81,6 @@ class CoverLetterGeneratorService {
       stdTTL: this.CACHE_TTL,
       checkperiod: 120,
     });
-  }
-
-  /**
-   * Try to find an available model
-   */
-  private getAvailableModel(): string | null {
-    const models = ["gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro"];
-
-    // Return the first model that works (or default to gemini-pro)
-    // In production, you might want to test each one
-    return models[0] || "gemini-pro";
   }
 
   /**
@@ -134,6 +95,7 @@ class CoverLetterGeneratorService {
     const {
       maxWords = this.DEFAULT_MAX_WORDS,
       tone = "professional",
+      language = "fa",
       retryCount = 2,
       useCache = true,
       focusSkills,
@@ -141,7 +103,7 @@ class CoverLetterGeneratorService {
     } = options;
 
     // If AI is disabled, use fallback
-    if (!this.isAIEnabled || !this.model) {
+    if (!this.isAIEnabled) {
       logger.warn("AI not available, using fallback cover letter generation");
       return this.generateFallbackCoverLetter(
         jobDetails,
@@ -174,6 +136,7 @@ class CoverLetterGeneratorService {
         maxWords,
         tone,
         focusSkills,
+        language,
       );
 
       // Check cache
@@ -196,14 +159,30 @@ class CoverLetterGeneratorService {
             tone,
             focusSkills,
             includeAchievements,
+            language,
           );
 
-          const result = await this.model.generateContent(prompt);
-          const coverLetter = result.response.text().trim();
+          const result = await completePrompt(
+            `You are an expert cover letter writer. Write the cover letter in ${this.languageName(language)}. Output ONLY the finished letter body — never include planning, reasoning, or explanations.`,
+            prompt,
+            { temperature: 0.7, maxTokens: 800, topP: 0.9 },
+          );
+          if (!result.success) {
+            throw new Error(result.error || "AI request failed");
+          }
+          const coverLetter = result.content.trim();
 
           // Validate the generated cover letter
           if (!coverLetter || coverLetter.length < 50) {
             throw new Error("Generated cover letter is too short or empty");
+          }
+
+          // Some reasoning models occasionally spill their planning/thinking
+          // into the response instead of writing the letter. Detect and retry.
+          if (this.looksLikeReasoningSpill(coverLetter)) {
+            throw new Error(
+              "Model returned planning text instead of a letter; retrying",
+            );
           }
 
           // Format result
@@ -387,67 +366,52 @@ ${name}
     tone: string,
     focusSkills?: string[],
     includeAchievements: boolean = true,
+    language: string = "fa",
   ): string {
-    const toneDescriptions = {
-      professional:
-        "formal and business-like, highlighting qualifications professionally",
-      enthusiastic:
-        "energetic and passionate, showing genuine excitement for the role",
-      formal: "traditional and respectful, using formal business language",
-      casual:
-        "friendly and approachable, while still maintaining professionalism",
-      confident:
-        "assertive and self-assured, demonstrating strong belief in your abilities",
-    };
+    const langLabel = this.languageName(language);
 
+    // Keep the prompt short and directive. A verbose prompt makes reasoning
+    // models plan out loud instead of writing the letter, which pollutes the
+    // output. Explicitly tell the model to output ONLY the finished letter.
     let prompt = `
-      Write a ${tone} cover letter for the following position.
+Write the finished cover letter now, directly in ${langLabel} (${language}) — no planning, no commentary, no meta-text. Output ONLY the letter body.
 
-      JOB DETAILS:
-      Title: ${jobDetails.title}
-      Company: ${jobDetails.company}
-      Location: ${jobDetails.location}
-      ${jobDetails.hiringManager ? `Hiring Manager: ${jobDetails.hiringManager}` : ""}
-      ${jobDetails.industry ? `Industry: ${jobDetails.industry}` : ""}
-      ${jobDetails.companyCulture ? `Company Culture: ${jobDetails.companyCulture}` : ""}
-      
-      Key Requirements:
-      ${jobDetails.requirements}
-      
-      Job Description:
-      ${jobDetails.description}
-      
-      CANDIDATE RESUME:
-      ${resumeText}
-      
-      COVER LETTER REQUIREMENTS:
-      - Maximum ${maxWords} words
-      - Use "${toneDescriptions[tone as keyof typeof toneDescriptions] || "professional"}" tone
-      - Address hiring manager professionally (use "Dear Hiring Manager" if name unknown)
-    `;
+ROLE: ${jobDetails.title} at ${jobDetails.company}, ${jobDetails.location}
+REQUIREMENTS: ${jobDetails.requirements}
+DESCRIPTION: ${jobDetails.description}
+
+CANDIDATE: ${resumeText}
+
+RULES:
+- Entire letter in ${langLabel}. Keep the candidate's skills and technical terms as-is.
+- ~${maxWords} words, 3-4 paragraphs, formal "${tone}" tone.
+- Use a proper ${langLabel} salutation and closing. Highlight 2-3 relevant skills${includeAchievements ? " and one real achievement" : ""}. End with a call to action. First person.
+- No placeholders like [Your Name].
+`;
 
     if (focusSkills && focusSkills.length > 0) {
-      prompt += `\n- Focus on these specific skills: ${focusSkills.join(", ")}`;
+      prompt += `\nFocus on these skills: ${focusSkills.join(", ")}`;
     }
 
-    prompt += `
-      - Highlight 2-3 most relevant skills from the resume
-      ${includeAchievements ? "- Include at least one specific achievement or example from the resume" : ""}
-      - Show enthusiasm for both the role and company
-      - End with a professional call to action
-      - Write in first person
-      - Use proper paragraph structure (3-4 paragraphs)
-      
-      IMPORTANT: 
-      - Do NOT include placeholders like [Your Name] or [Your Contact Info]
-      - Write as if you are the candidate applying for this specific role
-      - Make it unique and tailored, not generic
-      - Use specific details from the job description to show you've done your research
-      
-      Return ONLY the cover letter text, no additional commentary.
-    `;
-
     return prompt;
+  }
+
+  /**
+   * Map a language code to a human-readable name for the AI.
+   */
+  private languageName(language?: string): string {
+    return (
+      {
+        fa: "Farsi (Persian)",
+        en: "English",
+        ar: "Arabic",
+        tr: "Turkish",
+        de: "German",
+        fr: "French",
+        es: "Spanish",
+        ru: "Russian",
+      }[language || "fa"] || "Farsi (Persian)"
+    );
   }
 
   /**
@@ -473,7 +437,7 @@ ${name}
     if (startTime) {
       result.metadata = {
         processingTime: Date.now() - startTime,
-        modelUsed: this.isAIEnabled ? "gemini-pro" : "fallback",
+        modelUsed: this.isAIEnabled ? config.AI_MODEL : "fallback",
         timestamp: new Date().toISOString(),
         fromCache: false,
         tone: tone || "professional",
@@ -489,6 +453,47 @@ ${name}
    */
   private countWords(text: string): number {
     return text.trim().split(/\s+/).length;
+  }
+
+  /**
+   * Heuristic to detect when a reasoning model spilled its internal planning
+   * into the output instead of writing the actual letter. These texts contain
+   * meta-instructions / outlines rather than a finished letter.
+   */
+  private looksLikeReasoningSpill(text: string): boolean {
+    const reasoningMarkers = [
+      "I need to",
+      "Let me",
+      "let me",
+      "I should",
+      "I will write",
+      "Now, write",
+      "Structure the letter",
+      "Outline:",
+      "Outline of",
+      "First paragraph",
+      "First, the",
+      "The rules say",
+      "the rules say",
+      "As per the instruction",
+      "Word count:",
+      "Count words",
+      "paragraph structure",
+      "I'll start with",
+      "I will start with",
+      "In terms of structure",
+      "Let's begin",
+      "Finally, close",
+      "Declare the position",
+    ];
+
+    // If no salutation-like opening is present and reasoning markers are
+    // abundant, treat it as a spill.
+    const markerHits = reasoningMarkers.filter((m) =>
+      text.toLowerCase().includes(m.toLowerCase()),
+    ).length;
+
+    return markerHits >= 2 || (text.length > 400 && text.length < 3000 && markerHits >= 1);
   }
 
   /**
@@ -542,6 +547,7 @@ ${name}
     maxWords: number,
     tone: string,
     focusSkills?: string[],
+    language?: string,
   ): string {
     const data = {
       jobHash: hashString(
@@ -550,6 +556,7 @@ ${name}
       resumeHash: hashString(resumeText.substring(0, 500)),
       maxWords,
       tone,
+      language: language || "fa",
       focusSkills: focusSkills || [],
     };
     return `coverletter:${JSON.stringify(data)}`;

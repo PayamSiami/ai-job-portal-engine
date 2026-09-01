@@ -735,9 +735,12 @@ class ResumeController {
           description: job.description || "",
         },
         content,
+        {
+          language: req.body.language || "fa",
+        },
       );
 
-      sendSuccess(res, { coverLetter }, "Cover letter generated successfully");
+      sendSuccess(res, coverLetter, "Cover letter generated successfully");
     },
   );
 

@@ -1,9 +1,8 @@
 // src/services/healthService.ts
 import mongoose from "mongoose";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../config/index";
-import logger from "../utils/logger";
 import os from "os";
+import { testAIConnection } from "./ai/aiClient";
 
 export interface HealthCheckResult {
   status: "healthy" | "degraded" | "unhealthy";
@@ -48,24 +47,11 @@ export interface SystemMetrics {
 }
 
 class HealthService {
-  private genAI: GoogleGenerativeAI | null = null;
-  private model: any = null;
   private lastAiCheck: { status: HealthCheck["status"]; timestamp: number } | null = null;
   private readonly AI_CHECK_CACHE_MS = 60000; // Cache AI check for 1 minute
 
   constructor() {
-    this.initAI();
-  }
-
-  private initAI(): void {
-    if (config.GEMINI_API_KEY) {
-      try {
-        this.genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-        this.model = this.genAI.getGenerativeModel({ model: config.GEMINI_MODEL || "gemini-1.5-flash" });
-      } catch (error) {
-        logger.warn("Failed to initialize AI for health checks", { error });
-      }
-    }
+    // No eager init needed; AI is checked on demand via the unified client.
   }
 
   /**
@@ -191,10 +177,11 @@ class HealthService {
       };
     }
 
-    if (!this.genAI || !this.model) {
+    if (!config.AI_MODEL || !config.AI_BASE_URL) {
       const result: HealthCheck = {
         status: "unhealthy",
-        message: "AI service not configured (GEMINI_API_KEY missing)",
+        message:
+          "AI service not configured (AI_MODEL/AI_BASE_URL missing)",
         latencyMs: Date.now() - startTime,
         details: { configured: false },
       };
@@ -203,17 +190,19 @@ class HealthService {
     }
 
     try {
-      // Simple test generation to verify API key and quota
-      const result = await this.model.generateContent("Health check");
-      const text = result.response.text();
+      // Simple test generation to verify the endpoint and model
+      const conn = await testAIConnection();
+      const text = conn.message;
 
       const checkResult: HealthCheck = {
-        status: text ? "healthy" : "degraded",
-        message: text ? "AI service responding normally" : "AI service returned empty response",
+        status: conn.success ? "healthy" : "degraded",
+        message: conn.success
+          ? "AI service responding normally"
+          : "AI service returned empty response",
         latencyMs: Date.now() - startTime,
         details: {
           configured: true,
-          model: config.GEMINI_MODEL || "gemini-1.5-flash",
+          model: config.AI_MODEL,
           responseLength: text?.length || 0,
         },
       };

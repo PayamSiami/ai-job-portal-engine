@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
 import Job, { IJob } from "../models/Job.models";
 import { config } from "../config/index";
 import Company from "../models/Company.models";
@@ -7,6 +6,7 @@ import Application, { ApplicationStatus } from "../models/Application.model";
 import logger from "../utils/logger";
 import mongoose, { Types } from "mongoose";
 import { JobPerformance } from "./dashboard.service";
+import { completePrompt } from "./ai/aiClient";
 
 // Define strict types that match the model
 export type ExperienceLevel = "entry" | "mid" | "senior" | "lead";
@@ -58,30 +58,18 @@ export interface GeneratedJobContent {
 }
 
 class JobService {
-  private genAI?: GoogleGenerativeAI;
-  private model?: GenerativeModel;
+  private isAIEnabled: boolean;
 
   constructor() {
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (apiKey) {
-      try {
-        this.genAI = new GoogleGenerativeAI(apiKey);
-        this.model = this.genAI.getGenerativeModel({
-          model: config.GEMINI_MODEL || "gemini-pro",
-          generationConfig: {
-            temperature: config.GEMINI_TEMPERATURE || 0.7,
-            topK: config.GEMINI_TOP_K || 40,
-            topP: config.GEMINI_TOP_P || 0.95,
-            maxOutputTokens: 2048,
-          },
-        });
-        logger.info("Gemini AI initialized successfully");
-      } catch (error) {
-        logger.warn("Failed to initialize Gemini AI", { error });
-      }
+    this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+    if (!this.isAIEnabled) {
+      logger.warn(
+        "AI_MODEL/AI_BASE_URL not configured. AI content features will use fallbacks.",
+      );
     } else {
-      logger.warn("GEMINI_API_KEY not found. AI features will be disabled.");
+      logger.info(
+        `AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`,
+      );
     }
   }
 
@@ -234,7 +222,7 @@ class JobService {
     }
 
     // Check if AI model is available
-    if (!this.model) {
+    if (!this.isAIEnabled) {
       logger.warn("AI model not available. Using fallback content generation.");
       return this.generateFallbackJobContent(jobTitle);
     }
@@ -263,9 +251,15 @@ class JobService {
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = result.response;
-      let text = response.text();
+      const result = await completePrompt(
+        "You are an expert job poster. Generate realistic, professional job content. Return ONLY valid JSON without markdown or extra text.",
+        prompt,
+        { temperature: 0.7, maxTokens: 2048, topP: 0.95 },
+      );
+      if (!result.success) {
+        throw new Error(result.error || "AI request failed");
+      }
+      let text = result.content;
 
       // Clean the response - remove markdown code blocks
       text = text

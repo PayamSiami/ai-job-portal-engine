@@ -140,17 +140,17 @@ class ActivityService {
         if (typeFilter && !["application", "all"].includes(typeFilter))
             return [];
         const applications = await Application.find({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
         })
-            .populate("userId", "profile.firstName profile.lastName profile.profileImage")
+            .populate("user", "profile.firstName profile.lastName profile.profileImage")
             .sort({ appliedAt: -1 })
             .limit(100);
         return applications
             .map((app) => {
             const timestamp = app.appliedAt || app.createdAt;
-            const job = jobs.find((j) => j._id.toString() === app.jobId.toString());
-            const userName = app.userId
-                ? `${app.userId.profile?.firstName || ""} ${app.userId.profile?.lastName || ""}`.trim() ||
+            const job = jobs.find((j) => j._id.toString() === app.job.toString());
+            const userName = app.user
+                ? `${app.user.profile?.firstName || ""} ${app.user.profile?.lastName || ""}`.trim() ||
                     "Unknown"
                 : "Unknown";
             return {
@@ -174,18 +174,18 @@ class ActivityService {
         if (typeFilter && !["screening", "all"].includes(typeFilter))
             return [];
         const applications = await Application.find({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
             aiScore: { $exists: true, $ne: null },
         })
-            .populate("userId", "profile.firstName profile.lastName")
+            .populate("user", "profile.firstName profile.lastName")
             .sort({ updatedAt: -1 })
             .limit(50);
         const activities = [];
         // Single candidate screening
         applications.slice(0, 10).forEach((app) => {
-            const job = jobs.find((j) => j._id.toString() === app.jobId.toString());
-            const userName = app.userId
-                ? `${app.userId.profile?.firstName || ""} ${app.userId.profile?.lastName || ""}`.trim() ||
+            const job = jobs.find((j) => j._id.toString() === app.job.toString());
+            const userName = app.user
+                ? `${app.user.profile?.firstName || ""} ${app.user.profile?.lastName || ""}`.trim() ||
                     "Unknown"
                 : "Unknown";
             activities.push({
@@ -206,7 +206,7 @@ class ActivityService {
         // Bulk screening summary
         const screenedByJob = {};
         applications.forEach((app) => {
-            const jobId = app.jobId.toString();
+            const jobId = app.job.toString();
             if (!screenedByJob[jobId]) {
                 const job = jobs.find((j) => j._id.toString() === jobId);
                 screenedByJob[jobId] = {
@@ -287,10 +287,10 @@ class ActivityService {
             return [];
         const activities = [];
         const totalApplications = await Application.countDocuments({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
         });
         const hiredCount = await Application.countDocuments({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
             status: ApplicationStatus.HIRED,
         });
         const now = new Date();
@@ -298,7 +298,7 @@ class ActivityService {
         const lastMonth = new Date(now);
         lastMonth.setMonth(lastMonth.getMonth() - 1);
         const monthlyApps = await Application.countDocuments({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
             appliedAt: { $gte: lastMonth },
         });
         if (monthlyApps > 0 && this.matchesTimestamp(now, dateFrom, dateTo)) {
@@ -323,7 +323,7 @@ class ActivityService {
         const quarterStart = new Date(now);
         quarterStart.setMonth(quarterStart.getMonth() - 3);
         const quarterlyApps = await Application.countDocuments({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
             appliedAt: { $gte: quarterStart },
         });
         if (quarterlyApps > 50 && this.matchesTimestamp(now, dateFrom, dateTo)) {
@@ -345,18 +345,18 @@ class ActivityService {
         if (typeFilter && !["interview", "all"].includes(typeFilter))
             return [];
         const applications = await Application.find({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
             status: ApplicationStatus.INTERVIEWING,
         })
-            .populate("userId", "profile.firstName profile.lastName")
+            .populate("user", "profile.firstName profile.lastName")
             .sort({ updatedAt: -1 })
             .limit(20);
         return applications
             .map((app) => {
             const timestamp = app.updatedAt;
-            const job = jobs.find((j) => j._id.toString() === app.jobId.toString());
-            const userName = app.userId
-                ? `${app.userId.profile?.firstName || ""} ${app.userId.profile?.lastName || ""}`.trim() ||
+            const job = jobs.find((j) => j._id.toString() === app.job.toString());
+            const userName = app.user
+                ? `${app.user.profile?.firstName || ""} ${app.user.profile?.lastName || ""}`.trim() ||
                     "Unknown"
                 : "Unknown";
             return {
@@ -380,7 +380,7 @@ class ActivityService {
         if (typeFilter && !["status_change", "all"].includes(typeFilter))
             return [];
         const applications = await Application.find({
-            jobId: { $in: jobIds },
+            job: { $in: jobIds },
             status: {
                 $in: [
                     ApplicationStatus.SHORTLISTED,
@@ -389,15 +389,15 @@ class ActivityService {
                 ],
             },
         })
-            .populate("userId", "profile.firstName profile.lastName")
+            .populate("user", "profile.firstName profile.lastName")
             .sort({ updatedAt: -1 })
             .limit(30);
         return applications
             .map((app) => {
             const timestamp = app.updatedAt;
-            const job = jobs.find((j) => j._id.toString() === app.jobId.toString());
-            const userName = app.userId
-                ? `${app.userId.profile?.firstName || ""} ${app.userId.profile?.lastName || ""}`.trim() ||
+            const job = jobs.find((j) => j._id.toString() === app.job.toString());
+            const userName = app.user
+                ? `${app.user.profile?.firstName || ""} ${app.user.profile?.lastName || ""}`.trim() ||
                     "Unknown"
                 : "Unknown";
             const statusLabels = {

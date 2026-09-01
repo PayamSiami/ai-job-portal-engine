@@ -1,12 +1,8 @@
-import {
-  GoogleGenerativeAI,
-  GenerativeModel,
-  GenerationConfig,
-} from "@google/generative-ai";
 import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
+import { completePrompt } from "./aiClient";
 
 export interface ApplicationData {
   expectedSalary?: number;
@@ -86,8 +82,6 @@ export interface ValidationResult {
 // ============ Service Class ============
 
 class ApplicationScreeningService {
-  private genAI: GoogleGenerativeAI;
-  private model: GenerativeModel;
   private cache: NodeCache;
   private readonly MAX_RESUME_LENGTH = 4000;
   private readonly MAX_JOB_DETAILS_LENGTH = 3000;
@@ -100,24 +94,11 @@ class ApplicationScreeningService {
   };
 
   constructor() {
-    const apiKey = config.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is required in environment variables");
+    if (!config.AI_MODEL || !config.AI_BASE_URL) {
+      throw new Error(
+        "AI_MODEL and AI_BASE_URL are required in environment variables",
+      );
     }
-
-    this.genAI = new GoogleGenerativeAI(apiKey);
-
-    const generationConfig: GenerationConfig = {
-      temperature: 0.1,
-      topK: 1,
-      topP: 0.8,
-      maxOutputTokens: 800,
-    };
-
-    this.model = this.genAI.getGenerativeModel({
-      model: config.GEMINI_MODEL,
-      generationConfig,
-    });
 
     // ✅ Initialize cache
     this.cache = new NodeCache({
@@ -171,7 +152,7 @@ class ApplicationScreeningService {
     }
 
     // Check if AI model is available
-    if (!this.model) {
+    if (!config.AI_MODEL) {
       logger.warn("AI model not available. Returning fallback result.");
       return this.getFallbackResult("AI model not initialized");
     }
@@ -198,14 +179,21 @@ class ApplicationScreeningService {
           includeBreakdown,
         );
 
-        const result = await this.model.generateContent(prompt);
-        const cleanedText = this.cleanAIResponse(result.response.text());
+        const result = await completePrompt(
+          "You are an expert applicant screener. Return ONLY valid JSON without markdown or extra text.",
+          prompt,
+          { temperature: 0.1, maxTokens: 800, topP: 0.8 },
+        );
+        if (!result.success) {
+          throw new Error(result.error || "AI request failed");
+        }
+        const cleanedText = this.cleanAIResponse(result.content);
         const parsed = this.parseScreeningResult(cleanedText, includeBreakdown);
 
         // Add metadata
         const metadata: ScreeningMetadata = {
           processingTime: Date.now() - startTime,
-          modelUsed: config.GEMINI_MODEL,
+          modelUsed: config.AI_MODEL,
           timestamp: new Date().toISOString(),
           fromCache: false,
         };
@@ -514,7 +502,7 @@ class ApplicationScreeningService {
       recommendation: "consider",
       metadata: {
         processingTime: 0,
-        modelUsed: config.GEMINI_MODEL,
+        modelUsed: config.AI_MODEL,
         timestamp: new Date().toISOString(),
         fromCache: false,
       },
