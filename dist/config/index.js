@@ -10,11 +10,6 @@ class Config {
     GEMINI_TEMPERATURE;
     GEMINI_TOP_K;
     GEMINI_TOP_P;
-    // Unified AI provider (OpenAI-compatible). Defaults to a local 9router-style endpoint.
-    AI_PROVIDER;
-    AI_BASE_URL;
-    AI_API_KEY;
-    AI_MODEL;
     MONGODB_URI;
     CORS_ORIGIN;
     CORS_CREDENTIALS;
@@ -25,6 +20,11 @@ class Config {
     // Google OAuth
     GOOGLE_CLIENT_ID;
     GOOGLE_CLIENT_SECRET;
+    // Unified AI provider (OpenAI-compatible). Defaults to a local 9router-style endpoint.
+    AI_PROVIDER;
+    AI_BASE_URL;
+    AI_API_KEY;
+    AI_MODEL;
     constructor() {
         this.JWT_SECRET = process.env.JWT_SECRET || "";
         this.JWT_EXPIRE = process.env.JWT_EXPIRE || "";
