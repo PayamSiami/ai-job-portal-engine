@@ -3,7 +3,7 @@ import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
 import logger from "../../utils/logger.js";
 import hashString from "../../utils/hashString.js";
-import { completePrompt } from "./aiClient.js";
+import { completePrompt, isAIConfigured, cleanAIJsonResponse, truncateForPrompt, aiDelay, } from "./aiClient.js";
 // ============ Service Class ============
 class ResumeAnalyzerService {
     cache;
@@ -13,12 +13,9 @@ class ResumeAnalyzerService {
     isAIEnabled = false;
     constructor() {
         // AI is enabled when an AI model + endpoint is configured.
-        this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+        this.isAIEnabled = isAIConfigured();
         if (!this.isAIEnabled) {
             logger.warn("AI_MODEL/AI_BASE_URL not configured. AI features will use fallbacks.");
-        }
-        else {
-            logger.info(`AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`);
         }
         // Initialize cache
         this.cache = new NodeCache({
@@ -154,14 +151,7 @@ Provide specific, actionable suggestions.
 `;
     }
     cleanAIResponse(text) {
-        text = text.replace(/```json\s*/g, "");
-        text = text.replace(/```\s*/g, "");
-        text = text.trim();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            return jsonMatch[0];
-        }
-        return text;
+        return cleanAIJsonResponse(text);
     }
     parseAndValidateAnalysis(text) {
         try {
@@ -240,11 +230,7 @@ Provide specific, actionable suggestions.
         }
     }
     truncateText(text, maxLength) {
-        if (!text)
-            return "";
-        if (text.length <= maxLength)
-            return text;
-        return text.substring(0, maxLength) + "...";
+        return truncateForPrompt(text, maxLength);
     }
     generateAnalysisCacheKey(resume, requirements, description, industry, targetRole) {
         const data = `${resume}|${requirements}|${description}|${industry || ""}|${targetRole || ""}`;
@@ -277,7 +263,7 @@ Provide specific, actionable suggestions.
         };
     }
     delay(ms) {
-        return new Promise((resolve) => setTimeout(resolve, ms));
+        return aiDelay(ms);
     }
     // ============ Public Utility Methods ============
     clearCache() {

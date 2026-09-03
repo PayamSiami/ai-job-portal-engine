@@ -3,7 +3,13 @@ import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
-import { completePrompt } from "./aiClient";
+import {
+  completePrompt,
+  isAIConfigured,
+  cleanAIJsonResponse,
+  truncateForPrompt,
+  aiDelay,
+} from "./aiClient";
 
 // ============ Type Definitions ============
 
@@ -63,14 +69,10 @@ class ResumeAnalyzerService {
 
   constructor() {
     // AI is enabled when an AI model + endpoint is configured.
-    this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+    this.isAIEnabled = isAIConfigured();
     if (!this.isAIEnabled) {
       logger.warn(
         "AI_MODEL/AI_BASE_URL not configured. AI features will use fallbacks.",
-      );
-    } else {
-      logger.info(
-        `AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`,
       );
     }
 
@@ -264,16 +266,7 @@ Provide specific, actionable suggestions.
   }
 
   private cleanAIResponse(text: string): string {
-    text = text.replace(/```json\s*/g, "");
-    text = text.replace(/```\s*/g, "");
-    text = text.trim();
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return jsonMatch[0];
-    }
-
-    return text;
+    return cleanAIJsonResponse(text);
   }
 
   private parseAndValidateAnalysis(
@@ -377,9 +370,7 @@ Provide specific, actionable suggestions.
   }
 
   private truncateText(text: string, maxLength: number): string {
-    if (!text) return "";
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + "...";
+    return truncateForPrompt(text, maxLength);
   }
 
   private generateAnalysisCacheKey(
@@ -422,7 +413,7 @@ Provide specific, actionable suggestions.
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return aiDelay(ms);
   }
 
   // ============ Public Utility Methods ============

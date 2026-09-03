@@ -3,7 +3,7 @@ import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
 import logger from "../../utils/logger.js";
 import hashString from "../../utils/hashString.js";
-import { completePrompt } from "./aiClient.js";
+import { completePrompt, isAIConfigured, aiLanguageName, truncateForPrompt, aiDelay, } from "./aiClient.js";
 // ============ Service Class ============
 class CoverLetterGeneratorService {
     cache;
@@ -14,12 +14,9 @@ class CoverLetterGeneratorService {
     isAIEnabled = false;
     constructor() {
         // AI is enabled when an AI model + endpoint is configured.
-        this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+        this.isAIEnabled = isAIConfigured();
         if (!this.isAIEnabled) {
             logger.warn("AI_MODEL/AI_BASE_URL not configured. AI features will use fallbacks.");
-        }
-        else {
-            logger.info(`AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`);
         }
         // Initialize cache
         this.cache = new NodeCache({
@@ -43,7 +40,7 @@ class CoverLetterGeneratorService {
             // Validate inputs
             this.validateInputs(jobDetails, resumeText);
             // Truncate inputs if they're too long
-            const truncatedResume = this.truncateText(resumeText, this.MAX_RESUME_LENGTH);
+            const truncatedResume = truncateForPrompt(resumeText, this.MAX_RESUME_LENGTH, "... (truncated)");
             const truncatedJobDetails = this.truncateJobDetails(jobDetails, this.MAX_JOB_DETAILS_LENGTH);
             // Generate cache key
             const cacheKey = this.generateCacheKey(truncatedJobDetails, truncatedResume, maxWords, tone, focusSkills, language);
@@ -60,7 +57,7 @@ class CoverLetterGeneratorService {
             for (let attempt = 0; attempt <= retryCount; attempt++) {
                 try {
                     const prompt = this.buildPrompt(truncatedJobDetails, truncatedResume, maxWords, tone, focusSkills, includeAchievements, language);
-                    const result = await completePrompt(`You are an expert cover letter writer. Write the cover letter in ${this.languageName(language)}. Output ONLY the finished letter body — never include planning, reasoning, or explanations.`, prompt, { temperature: 0.7, maxTokens: 800, topP: 0.9 });
+                    const result = await completePrompt(`You are an expert cover letter writer. Write the cover letter in ${aiLanguageName(language)}. Output ONLY the finished letter body — never include planning, reasoning, or explanations.`, prompt, { temperature: 0.7, maxTokens: 800, topP: 0.9 });
                     if (!result.success) {
                         throw new Error(result.error || "AI request failed");
                     }
@@ -93,7 +90,7 @@ class CoverLetterGeneratorService {
                         return this.generateFallbackCoverLetter(jobDetails, resumeText, tone, startTime);
                     }
                     if (attempt < retryCount) {
-                        await this.delay(Math.pow(2, attempt) * 1000);
+                        await aiDelay(Math.pow(2, attempt) * 1000);
                     }
                 }
             }
@@ -206,7 +203,7 @@ ${name}
      * Build the AI prompt
      */
     buildPrompt(jobDetails, resumeText, maxWords, tone, focusSkills, includeAchievements = true, language = "fa") {
-        const langLabel = this.languageName(language);
+        const langLabel = aiLanguageName(language);
         // Keep the prompt short and directive. A verbose prompt makes reasoning
         // models plan out loud instead of writing the letter, which pollutes the
         // output. Explicitly tell the model to output ONLY the finished letter.
@@ -229,21 +226,6 @@ RULES:
             prompt += `\nFocus on these skills: ${focusSkills.join(", ")}`;
         }
         return prompt;
-    }
-    /**
-     * Map a language code to a human-readable name for the AI.
-     */
-    languageName(language) {
-        return ({
-            fa: "Farsi (Persian)",
-            en: "English",
-            ar: "Arabic",
-            tr: "Turkish",
-            de: "German",
-            fr: "French",
-            es: "Spanish",
-            ru: "Russian",
-        }[language || "fa"] || "Farsi (Persian)");
     }
     /**
      * Format the result
@@ -312,21 +294,6 @@ RULES:
         return markerHits >= 2 || (text.length > 400 && text.length < 3000 && markerHits >= 1);
     }
     /**
-     * Delay helper
-     */
-    delay(ms) {
-        return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-    /**
-     * Truncate text
-     */
-    truncateText(text, maxLength) {
-        if (text.length <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "... (truncated)";
-    }
-    /**
      * Truncate job details
      */
     truncateJobDetails(jobDetails, maxLength) {
@@ -338,7 +305,7 @@ RULES:
         const fields = ["requirements", "description"];
         for (const field of fields) {
             if (truncated[field] && truncated[field].length > maxLength / 2) {
-                truncated[field] = this.truncateText(truncated[field], maxLength / 2);
+                truncated[field] = truncateForPrompt(truncated[field], maxLength / 2, "... (truncated)");
             }
         }
         return truncated;

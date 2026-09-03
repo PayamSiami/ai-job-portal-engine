@@ -2,7 +2,7 @@ import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
-import { completePrompt } from "./aiClient";
+import { completePrompt, cleanAIJsonResponse, truncateForPrompt, aiDelay } from "./aiClient";
 
 // ============ Type Definitions ============
 
@@ -594,12 +594,7 @@ class CareerFeedbackService {
   }
 
   private cleanAIResponse(responseText: string): string {
-    return responseText
-      .replace(/```json\s*/g, "")
-      .replace(/```\s*/g, "")
-      .replace(/^[^{]*/, "")
-      .replace(/[^}]*$/, "")
-      .trim();
+    return cleanAIJsonResponse(responseText);
   }
 
   private generateCacheKey(
@@ -616,10 +611,7 @@ class CareerFeedbackService {
   }
 
   private truncateText(text: string, maxLength: number): string {
-    if (text.length <= maxLength) {
-      return text;
-    }
-    return text.substring(0, maxLength) + "... (truncated)";
+    return truncateForPrompt(text, maxLength, "... (truncated)");
   }
 
   private getFallbackResult(error?: string): CareerFeedbackResult {
@@ -653,7 +645,7 @@ class CareerFeedbackService {
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return aiDelay(ms);
   }
 
   // ============ Public Utility Methods ============

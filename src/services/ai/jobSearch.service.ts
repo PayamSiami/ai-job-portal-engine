@@ -1,7 +1,6 @@
 import Job, { IJob } from "../../models/Job.models";
-import { config } from "../../config/index";
 import logger from "../../utils/logger";
-import { completePrompt } from "./aiClient";
+import { completePrompt, isAIConfigured, cleanAIJsonResponse } from "./aiClient";
 
 export type ExperienceLevel = "entry" | "mid" | "senior" | "lead";
 export type WorkMode = "remote" | "hybrid" | "on-site";
@@ -73,25 +72,16 @@ class JobService {
 
   constructor() {
     // AI is enabled when an AI model + endpoint is configured.
-    this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+    this.isAIEnabled = isAIConfigured();
     if (!this.isAIEnabled) {
       logger.warn(
         "AI_MODEL/AI_BASE_URL not configured. AI features will use fallbacks.",
-      );
-    } else {
-      logger.info(
-        `AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`,
       );
     }
   }
 
   private cleanAIResponse(responseText: string): string {
-    return responseText
-      .replace(/```json\s*/g, "")
-      .replace(/```\s*/g, "")
-      .replace(/^[^{]*/, "")
-      .replace(/[^}]*$/, "")
-      .trim();
+    return cleanAIJsonResponse(responseText);
   }
 
   /**

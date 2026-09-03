@@ -1,20 +1,16 @@
 import Job from "../models/Job.models.js";
-import { config } from "../config/index.js";
 import Company from "../models/Company.models.js";
 import { AppError } from "../utils/errorHandler.js";
 import Application, { ApplicationStatus } from "../models/Application.model.js";
 import logger from "../utils/logger.js";
 import mongoose, { Types } from "mongoose";
-import { completePrompt } from "./ai/aiClient.js";
+import { completePrompt, isAIConfigured, cleanAIJsonResponse } from "./ai/aiClient.js";
 class JobService {
     isAIEnabled;
     constructor() {
-        this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+        this.isAIEnabled = isAIConfigured();
         if (!this.isAIEnabled) {
             logger.warn("AI_MODEL/AI_BASE_URL not configured. AI content features will use fallbacks.");
-        }
-        else {
-            logger.info(`AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`);
         }
     }
     async getJobs(filters = {}, options = {}) {
@@ -172,12 +168,7 @@ class JobService {
             if (!result.success) {
                 throw new Error(result.error || "AI request failed");
             }
-            let text = result.content;
-            // Clean the response - remove markdown code blocks
-            text = text
-                .replace(/```json\s*/g, "")
-                .replace(/```\s*/g, "")
-                .trim();
+            let text = cleanAIJsonResponse(result.content);
             // Parse JSON
             const parsed = JSON.parse(text);
             // Ensure all required fields exist

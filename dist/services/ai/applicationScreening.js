@@ -2,7 +2,7 @@ import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
 import logger from "../../utils/logger.js";
 import hashString from "../../utils/hashString.js";
-import { completePrompt } from "./aiClient.js";
+import { completePrompt, cleanAIJsonResponse, truncateForPrompt, aiDelay } from "./aiClient.js";
 // ============ Service Class ============
 class ApplicationScreeningService {
     cache;
@@ -197,12 +197,7 @@ class ApplicationScreeningService {
         return prompt;
     }
     cleanAIResponse(responseText) {
-        return responseText
-            .replace(/```json\s*/g, "")
-            .replace(/```\s*/g, "")
-            .replace(/^[^{]*/, "")
-            .replace(/[^}]*$/, "")
-            .trim();
+        return cleanAIJsonResponse(responseText);
     }
     parseScreeningResult(cleanedText, includeBreakdown) {
         try {
@@ -268,10 +263,7 @@ class ApplicationScreeningService {
         }
     }
     truncateText(text, maxLength) {
-        if (text.length <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "... (truncated)";
+        return truncateForPrompt(text, maxLength, "... (truncated)");
     }
     truncateJobDetails(jobDetails, maxLength) {
         const combined = `${jobDetails.title} ${jobDetails.location} ${jobDetails.requirements} ${jobDetails.description}`;
@@ -304,7 +296,7 @@ class ApplicationScreeningService {
         };
     }
     delay(ms) {
-        return new Promise((resolve) => setTimeout(resolve, ms));
+        return aiDelay(ms);
     }
 }
 export default new ApplicationScreeningService();

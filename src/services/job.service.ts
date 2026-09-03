@@ -6,7 +6,7 @@ import Application, { ApplicationStatus } from "../models/Application.model";
 import logger from "../utils/logger";
 import mongoose, { Types } from "mongoose";
 import { JobPerformance } from "./dashboard.service";
-import { completePrompt } from "./ai/aiClient";
+import { completePrompt, isAIConfigured, cleanAIJsonResponse } from "./ai/aiClient";
 
 // Define strict types that match the model
 export type ExperienceLevel = "entry" | "mid" | "senior" | "lead";
@@ -61,14 +61,10 @@ class JobService {
   private isAIEnabled: boolean;
 
   constructor() {
-    this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+    this.isAIEnabled = isAIConfigured();
     if (!this.isAIEnabled) {
       logger.warn(
         "AI_MODEL/AI_BASE_URL not configured. AI content features will use fallbacks.",
-      );
-    } else {
-      logger.info(
-        `AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`,
       );
     }
   }
@@ -259,13 +255,7 @@ class JobService {
       if (!result.success) {
         throw new Error(result.error || "AI request failed");
       }
-      let text = result.content;
-
-      // Clean the response - remove markdown code blocks
-      text = text
-        .replace(/```json\s*/g, "")
-        .replace(/```\s*/g, "")
-        .trim();
+      let text = cleanAIJsonResponse(result.content);
 
       // Parse JSON
       const parsed = JSON.parse(text);

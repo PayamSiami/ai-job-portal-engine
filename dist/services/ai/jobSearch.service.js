@@ -1,25 +1,16 @@
-import { config } from "../../config/index.js";
 import logger from "../../utils/logger.js";
-import { completePrompt } from "./aiClient.js";
+import { completePrompt, isAIConfigured, cleanAIJsonResponse } from "./aiClient.js";
 class JobService {
     isAIEnabled = false;
     constructor() {
         // AI is enabled when an AI model + endpoint is configured.
-        this.isAIEnabled = !!config.AI_MODEL && !!config.AI_BASE_URL;
+        this.isAIEnabled = isAIConfigured();
         if (!this.isAIEnabled) {
             logger.warn("AI_MODEL/AI_BASE_URL not configured. AI features will use fallbacks.");
         }
-        else {
-            logger.info(`AI client ready (provider=${config.AI_PROVIDER}, endpoint=${config.AI_BASE_URL}, model=${config.AI_MODEL})`);
-        }
     }
     cleanAIResponse(responseText) {
-        return responseText
-            .replace(/```json\s*/g, "")
-            .replace(/```\s*/g, "")
-            .replace(/^[^{]*/, "")
-            .replace(/[^}]*$/, "")
-            .trim();
+        return cleanAIJsonResponse(responseText);
     }
     /**
      * Search jobs using parsed filters

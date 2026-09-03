@@ -33,11 +33,11 @@ export async function completeChat(messages, options = {}) {
             top_p: topP,
             max_tokens: maxTokens,
         });
-        const message = response.choices?.[0]?.message;
         // Some reasoning models put the final answer in `content`, others (or short
         // token budgets) leave it in `reasoning_content`. Prefer content, fall back
         // to reasoning_content so we never silently return empty.
-        let content = message?.content || message?.reasoning_content || "";
+        const raw = response.choices?.[0]?.message;
+        const content = raw?.content || raw?.reasoning_content || "";
         return {
             content,
             success: true,
@@ -78,5 +78,54 @@ export async function testAIConnection() {
         const message = error instanceof Error ? error.message : "Unknown error";
         return { success: false, message };
     }
+}
+/**
+ * Map a language code to a human-readable name for the AI.
+ */
+export function aiLanguageName(language) {
+    return ({
+        fa: "Farsi (Persian)",
+        en: "English",
+        ar: "Arabic",
+        tr: "Turkish",
+        de: "German",
+        fr: "French",
+        es: "Spanish",
+        ru: "Russian",
+    }[language || "fa"] || "Farsi (Persian)");
+}
+/**
+ * True when an AI model + endpoint are configured, i.e. AI features may run.
+ */
+export function isAIConfigured() {
+    return !!config.AI_MODEL && !!config.AI_BASE_URL;
+}
+/**
+ * Strip markdown fences and extract the JSON object from an AI response.
+ * Falls back to the trimmed text when no braces are present.
+ */
+export function cleanAIJsonResponse(text) {
+    const cleaned = text
+        .replace(/```json\s*/g, "")
+        .replace(/```\s*/g, "")
+        .trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    return jsonMatch ? jsonMatch[0] : cleaned;
+}
+/**
+ * Truncate prompt input to a maximum length, appending an ellipsis marker.
+ */
+export function truncateForPrompt(text, maxLength, suffix = "...") {
+    if (!text)
+        return "";
+    if (text.length <= maxLength)
+        return text;
+    return text.substring(0, maxLength) + suffix;
+}
+/**
+ * Retry backoff delay.
+ */
+export function aiDelay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 export default { completeChat, completePrompt, testAIConnection };

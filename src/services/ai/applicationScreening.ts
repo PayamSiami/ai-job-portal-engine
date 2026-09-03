@@ -2,7 +2,7 @@ import NodeCache from "node-cache";
 import { config } from "../../config/index";
 import logger from "../../utils/logger";
 import hashString from "../../utils/hashString";
-import { completePrompt } from "./aiClient";
+import { completePrompt, cleanAIJsonResponse, truncateForPrompt, aiDelay } from "./aiClient";
 
 export interface ApplicationData {
   expectedSalary?: number;
@@ -351,12 +351,7 @@ class ApplicationScreeningService {
   }
 
   private cleanAIResponse(responseText: string): string {
-    return responseText
-      .replace(/```json\s*/g, "")
-      .replace(/```\s*/g, "")
-      .replace(/^[^{]*/, "")
-      .replace(/[^}]*$/, "")
-      .trim();
+    return cleanAIJsonResponse(responseText);
   }
 
   private parseScreeningResult(
@@ -463,10 +458,7 @@ class ApplicationScreeningService {
   }
 
   private truncateText(text: string, maxLength: number): string {
-    if (text.length <= maxLength) {
-      return text;
-    }
-    return text.substring(0, maxLength) + "... (truncated)";
+    return truncateForPrompt(text, maxLength, "... (truncated)");
   }
 
   private truncateJobDetails(
@@ -510,7 +502,7 @@ class ApplicationScreeningService {
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return aiDelay(ms);
   }
 }
 

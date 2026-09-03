@@ -2,7 +2,7 @@ import NodeCache from "node-cache";
 import { config } from "../../config/index.js";
 import logger from "../../utils/logger.js";
 import hashString from "../../utils/hashString.js";
-import { completePrompt } from "./aiClient.js";
+import { completePrompt, cleanAIJsonResponse, truncateForPrompt, aiDelay } from "./aiClient.js";
 // ============ Service Class ============
 class CareerFeedbackService {
     cache;
@@ -417,12 +417,7 @@ class CareerFeedbackService {
         };
     }
     cleanAIResponse(responseText) {
-        return responseText
-            .replace(/```json\s*/g, "")
-            .replace(/```\s*/g, "")
-            .replace(/^[^{]*/, "")
-            .replace(/[^}]*$/, "")
-            .trim();
+        return cleanAIJsonResponse(responseText);
     }
     generateCacheKey(resumeText, industry, targetRole) {
         const data = {
@@ -433,10 +428,7 @@ class CareerFeedbackService {
         return `feedback:${JSON.stringify(data)}`;
     }
     truncateText(text, maxLength) {
-        if (text.length <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "... (truncated)";
+        return truncateForPrompt(text, maxLength, "... (truncated)");
     }
     getFallbackResult(error) {
         return {
@@ -468,7 +460,7 @@ class CareerFeedbackService {
         };
     }
     delay(ms) {
-        return new Promise((resolve) => setTimeout(resolve, ms));
+        return aiDelay(ms);
     }
     // ============ Public Utility Methods ============
     /**
