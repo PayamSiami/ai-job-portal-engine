@@ -1,23 +1,18 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install ALL dependencies (including devDependencies for the build)
 COPY package*.json ./
 RUN npm ci --include=dev --no-audit --no-fund
 
-# Copy source and build
 COPY . .
 RUN npm run build
 
-# Production stage — only runtime dependencies needed here
-FROM node:20-alpine
+# Production stage
+FROM node:22-alpine
 WORKDIR /app
 
-# Copy built output from builder
 COPY --from=builder /app/dist ./dist
-
-# Copy only production dependencies
 COPY package*.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
